@@ -1,0 +1,28 @@
+# Pipeline parameters — single source of truth, wired into DVC stages in Phase 2.
+#
+# NOTE: a class's position in this list IS its label index, in training and serving
+# alike (see quickdraw/config.py). Append new classes at the end and retrain — never
+# reorder or insert.
+data:
+  classes: # PLAN.md §1: visually distinct, drawable in under 10 seconds
+    - airplane
+    - apple
+    - banana
+    - bicycle
+    - bird
+    - car
+    - cat
+    - clock
+    - dog
+    - face
+    - fish
+    - house
+    - star
+    - tree
+    - umbrella
+  samples_per_class: 10000
+  seed: 42
+  splits:
+    train: 0.8
+    val: 0.1
+    test: 0.1

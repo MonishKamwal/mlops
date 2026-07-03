@@ -49,6 +49,15 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-03 (work laptop)** — Phase 1 task 1 code (branch `phase1-data-layer`,
+  stacked on `phase0-infra-persistent`): `params.yaml` + typed loader
+  (`quickdraw/config.py`; class order = label index); `data/download.py` (GCS bitmap
+  archives, atomic `.part`+rename, skip-existing); `data/preprocess.py` — serve-path
+  transforms (strokes/PNG → 28×28 → `bitmap_to_model_input`, the single shared
+  normalization), deterministic stratified split, uint8 `quickdraw.npz` artifact;
+  tests incl. exact stroke-parity + loose stroke-vs-PNG closeness. numpy/pillow/pyyaml
+  added to pyproject; **uv.lock NOT regenerated** (no uv here) → CI's
+  `uv sync --locked` fails until `uv lock` runs at home. Nothing executed.
 - **2026-07-03 (work laptop)** — Phase 0 task 4 code: `infra/persistent/` written —
   S3 backend (native locking, bucket name = `REPLACE_ME` placeholder), data + logs
   buckets (versioning / 180-day expiry), ECR repo (keep last 3 images), GitHub OIDC
@@ -67,8 +76,10 @@ is the long-term what-and-why; this file is the current state and the exact next
 Phase 0: tasks 1–3 done (billing alarm deferred by design). Task 4: `infra/persistent/`
 Terraform code written, **not yet validated or applied** — needs the hand-made state
 bucket, then `init`/`apply` from the personal laptop. Task 5 (portfolio repo scaffold)
-not started. Nothing committed yet (working tree: `.gitattributes` + `infra/` + doc
-updates).
+not started. Phase 1 task 1 (data layer) code written on branch `phase1-data-layer`
+(stacked on `phase0-infra-persistent`), **never executed** — no tests, lint, or
+downloads have run, and `uv.lock` is stale vs pyproject (numpy/pillow/pyyaml added),
+so CI is red on that branch by construction until `uv lock` runs at home.
 
 ## Immediate next step (rolling — keep this precise)
 
@@ -91,7 +102,17 @@ written; everything below except step 1 needs the personal laptop).
    add `AWS_REGION` and `GHA_APP_ROLE_ARN` from the Terraform outputs.
 5. Then Phase 0 task 5 (portfolio repo, see `PORTFOLIO_PLAN.md` there), then Phase 1
    task 1 (data download/preprocess).
+6. **New since this session — validate the Phase 1 data layer** (branch
+   `phase1-data-layer`, personal laptop, after the phase-0 branch merges):
+   `uv sync` (regenerates `uv.lock` — commit it; CI's `uv sync --locked` is red until
+   it lands), then `uv run ruff format . && uv run ruff check . && uv run pytest` —
+   this code has never executed; expect formatter touch-ups. The stroke-vs-PNG
+   closeness thresholds in `tests/test_data_preprocess.py::test_png_and_stroke_paths_agree`
+   (IoU > 0.4, mad < 0.15) are first guesses — calibrate rather than delete if they
+   fail. Then smoke the pipeline: `uv run python -m quickdraw.data.download` (~1.5 GB
+   into gitignored `data/raw/`) and `uv run python -m quickdraw.data.preprocess`.
 
 Watch items: `infra/persistent/` has never seen `terraform fmt/validate/apply` — first
-run happens on the personal laptop; EKS-on-free-plan question parked until Phase 3
-Task 0; markdownlint style nits in PLAN.md are known and not CI-checked.
+run happens on the personal laptop; the data-layer code has never been executed at
+all; EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint style nits in
+PLAN.md are known and not CI-checked.
