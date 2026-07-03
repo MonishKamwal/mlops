@@ -1,0 +1,3 @@
+# Normalize line endings: repo stores LF; git compares normalized content, so
+# CRLF checkouts on the Windows side no longer show every file as modified.
+* text=auto
