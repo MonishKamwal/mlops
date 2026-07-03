@@ -4,6 +4,31 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-03 — Terraform bootstrap, S3-native locking, OIDC (and a line-endings ambush)
+
+- **The state bucket is a chicken-and-egg.** Terraform can't create the bucket its own
+  state lives in, so exactly one resource — a versioned S3 bucket — is made by hand,
+  and everything else is code. Accepting one manual bootstrap resource is the standard
+  answer, not a compromise.
+- **State locking no longer needs DynamoDB.** Terraform ≥ 1.11 locks natively via a
+  lock object in the state bucket itself (`use_lockfile = true`). Most tutorials still
+  teach the DynamoDB lock-table pattern — that's legacy now.
+- **Backend blocks can't use variables.** Backend config is resolved before variable
+  evaluation, so the bucket/region in `backend.tf` are literals even though the same
+  region is a variable everywhere else.
+- **GitHub OIDC → AWS means CI holds zero long-lived secrets.** Each workflow run gets
+  a short-lived token signed by GitHub; AWS trusts the issuer once (the OIDC provider
+  resource), and the role's trust policy pins the *audience* (`sts.amazonaws.com`) and
+  *subject* (`repo:MonishKamwal/mlops:*`). There is no key to leak, and the role's
+  permission policy defines the entire blast radius.
+- **`default_tags` on the AWS provider** tags every resource the provider creates —
+  cost attribution that can't be forgotten one resource at a time.
+- **Line-endings ambush:** the repo stores LF, but Windows-side tooling checked files
+  out as CRLF, so git-in-WSL reported *every* tracked file modified with byte-identical
+  content. Fix: `.gitattributes` with `* text=auto`, which makes git compare normalized
+  content — and being committed, it fixes every clone on every machine, unlike the
+  per-machine `core.autocrlf` setting.
+
 ## 2026-07-03 — AWS account plans, billing guardrails, and regions
 
 - **AWS revamped its free tier in July 2025.** New accounts choose a *free plan* or

@@ -22,6 +22,9 @@ is the long-term what-and-why; this file is the current state and the exact next
   CloudWatch billing alarm is deliberately **deferred**: a free-plan account bills $0 by
   construction. It becomes mandatory the day the account upgrades to paid (PLAN.md
   Phase 3, Task 0).
+- **Region: us-east-1 for the whole project** (state bucket + all resources) —
+  defaulted in `infra/persistent/variables.tf` and `backend.tf`; if the hand-made
+  state bucket ends up elsewhere, update both plus this line.
 - GitHub: `MonishKamwal/mlops`, trunk-based (feature branch → PR → main). Stale
   `develop`/`staging` remote branches were deleted 2026-07-03.
 - Working style (PLAN.md preamble): one-time/admin actions happen via **web UI** by Monish —
@@ -46,6 +49,12 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-03 (work laptop)** — Phase 0 task 4 code: `infra/persistent/` written —
+  S3 backend (native locking, bucket name = `REPLACE_ME` placeholder), data + logs
+  buckets (versioning / 180-day expiry), ECR repo (keep last 3 images), GitHub OIDC
+  provider + `gha-app` role (trust pinned to this repo). Added `.gitattributes`
+  (`* text=auto`) — Windows/WSL CRLF churn was showing every tracked file as
+  modified. Not yet validated or applied: no terraform binary on the work laptop.
 - **2026-07-03** — Phase 0: README rewritten to single-model scope; uv/ruff/pytest/
   pre-commit scaffold + `src/quickdraw` skeleton + smoke tests; `ci.yml` (ruff, format
   check, pytest); budgets created; free-plan discovery → billing alarm deferred + Phase 3
@@ -55,32 +64,34 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Current state
 
-Phase 0: tasks 1–3 done (billing alarm deferred by design). Task 4 (`infra/persistent`
-Terraform) not started. Task 5 (portfolio repo scaffold) not started.
+Phase 0: tasks 1–3 done (billing alarm deferred by design). Task 4: `infra/persistent/`
+Terraform code written, **not yet validated or applied** — needs the hand-made state
+bucket, then `init`/`apply` from the personal laptop. Task 5 (portfolio repo scaffold)
+not started. Nothing committed yet (working tree: `.gitattributes` + `infra/` + doc
+updates).
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phase 0, task 4: the `infra/persistent` Terraform root.**
+**Finish Phase 0, task 4: bootstrap + apply the `infra/persistent` root** (code is
+written; everything below except step 1 needs the personal laptop).
 
 1. **Monish, S3 Console (one-time bootstrap):** create the TF state bucket — suggested
-   name `mlops-quickdraw-tfstate-<4 random chars>`, region **us-east-1** (suggestion:
-   keep the whole project in us-east-1; record the final region choice HERE). Enable
-   **versioning**; leave encryption + block-all-public-access at their secure defaults.
-2. **Claude, code:** write `infra/persistent/` — S3 backend with native S3 locking
-   (`use_lockfile = true`, requires Terraform ≥ 1.11); resources: data/state bucket +
-   logs bucket (versioning on the data bucket; 180-day expiry lifecycle on logs), ECR
-   repo (lifecycle: keep last 3 images), GitHub OIDC provider + `gha-app` IAM role
-   (S3/ECR/Lambda, trust scoped to this repo). `gha-infra` role and the Lambda function
-   itself come later (Phase 3 / Phase 1 task 4). Tag everything
-   `project = mlops-quickdraw`.
-3. **Monish, terminal:** install terraform + AWS CLI if missing (`brew install awscli
-   hashicorp/tap/terraform`), authenticate (IAM user or SSO — not root), then
-   `terraform init && terraform apply` in `infra/persistent/`; run `apply` twice to
-   confirm idempotence (Phase 0 DoD).
+   name `mlops-quickdraw-tfstate-<4 random chars>`, region **us-east-1**, versioning
+   **on**, encryption + block-all-public-access at their secure defaults. Then put the
+   real name in `infra/persistent/backend.tf` (replace `REPLACE_ME`) — or tell Claude.
+2. **Commit** (feature branch → PR → main): `.gitattributes`, `infra/persistent/`,
+   this file, `LEARNING.md`.
+3. **Monish, personal laptop terminal:** install terraform + AWS CLI if missing
+   (`brew install awscli hashicorp/tap/terraform`), authenticate (IAM user or SSO —
+   not root), then in `infra/persistent/`: `terraform init`, `terraform fmt -check`
+   and `terraform validate` (the code has never been through either — no terraform
+   binary on the work laptop), `terraform apply`, then `apply` again — the second run
+   must be a no-op (Phase 0 DoD).
 4. **Monish, GitHub UI:** repo → Settings → Secrets and variables → Actions → Variables:
    add `AWS_REGION` and `GHA_APP_ROLE_ARN` from the Terraform outputs.
 5. Then Phase 0 task 5 (portfolio repo, see `PORTFOLIO_PLAN.md` there), then Phase 1
    task 1 (data download/preprocess).
 
-Watch items: EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint style
-nits in PLAN.md are known and not CI-checked.
+Watch items: `infra/persistent/` has never seen `terraform fmt/validate/apply` — first
+run happens on the personal laptop; EKS-on-free-plan question parked until Phase 3
+Task 0; markdownlint style nits in PLAN.md are known and not CI-checked.
