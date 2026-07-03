@@ -58,7 +58,8 @@ Each row is also an interview talking point: chosen tool, one-line why, and the 
 | TF state | **S3 backend with native S3 locking (TF ≥ 1.11)** | One less service to manage | DynamoDB lock table — the classic pattern, now unnecessary |
 | K8s deploy | **Helm chart, ClusterIP + `kubectl port-forward` for tests** | No public LB → no idle/hourly LB cost, no DNS/TLS yak-shaving, smaller attack surface; evidence is captured, not served live | NLB/ALB Ingress — the production answer; noted in the chart as a values toggle |
 | Load testing | **k6 (+ HTML report)** | Single binary, scriptable in JS, exports static HTML evidence | Locust — needs Python workers, more moving parts |
-| Drift monitoring | **Evidently (static HTML reports)** | Purpose-built drift reports; free; renders to static HTML for the evidence hub | Prometheus+Grafana for drift — wrong tool; used only (optionally) for cluster metrics during EKS runs |
+| Drift monitoring | **Evidently (static HTML reports)** | Purpose-built drift reports; free; renders to static HTML for the evidence hub | Prometheus+Grafana for drift — wrong tool for distribution comparisons; they own the operational-metrics story instead (next row) |
+| Service metrics & dashboards | **Prometheus + Grafana (kube-prometheus-stack), installed during each EKS run; dashboards as code** | FastAPI exposes `/metrics`; Grafana dashboards (JSON in repo) show latency/RPS/errors live under k6 load; rendered screenshots become evidence — full observability story at zero standing cost | Always-on Grafana Cloud free tier — real, but splits the infra story across providers; CloudWatch covers the Lambda tier, which Prometheus can't scrape anyway |
 | Prediction logging | **FastAPI middleware → JSONL to S3** | At portfolio traffic, direct `put_object` per request is free and simple | Kinesis Firehose — the "at scale" answer, pure cost here |
 | Evidence hosting | **`mlops` repo's own GitHub Pages** (`monishkamwal.github.io/mlops/`) | Publishing evidence uses the default `GITHUB_TOKEN` — no cross-repo PAT; portfolio site just links/iframes it | Committing HTML into the portfolio repo — couples repos, needs a PAT, pollutes site history |
 | Python tooling | **uv + ruff + pytest + pre-commit, Python 3.12** | Fast, current, minimal config | pip/poetry, flake8+black — more tools, same outcome |
@@ -91,9 +92,9 @@ flowchart LR
 
     subgraph Eph["Ephemeral credits tier (weekly, ~1.5 h, then destroyed)"]
         W[Scheduled workflow] --> TFA[terraform apply<br/>VPC + EKS + nodes]
-        TFA --> H[helm install<br/>same image from ECR]
+        TFA --> H[helm install<br/>same image from ECR<br/>+ kube-prometheus-stack]
         H --> K6[smoke tests + k6 load test]
-        K6 --> CAP[capture metrics/screens] --> EV
+        K6 --> CAP[capture Grafana dashboards<br/>+ metrics/screens] --> EV
         CAP --> TFD[terraform destroy<br/>+ always-run failsafe]
     end
 
@@ -126,7 +127,8 @@ mlops/
 ├── dvc.yaml                    # stages: download → validate → preprocess → train → evaluate → export
 ├── params.yaml                 # classes, samples/class, epochs, lr, gate thresholds
 ├── Dockerfile                  # FastAPI + onnxruntime + Lambda Web Adapter (one image, both tiers)
-├── deploy/helm/quickdraw-api/  # chart: deployment, service, HPA; values toggle for LB
+├── deploy/helm/quickdraw-api/  # chart: deployment, service, HPA, ServiceMonitor; values toggle for LB
+├── deploy/grafana/dashboards/  # dashboards-as-code (JSON), provisioned into each EKS run
 ├── infra/
 │   ├── persistent/             # S3 ×2, ECR, Lambda + Function URL, IAM OIDC roles, budgets/alarms
 │   └── ephemeral/              # VPC, EKS, managed node group (spot) — applied/destroyed weekly
@@ -159,6 +161,12 @@ previous phase's demo from continuing to work.
    *Billing & Cost Management → Budgets*, and a billing alarm under *CloudWatch → Alarms →
    Billing* (region us-east-1 for billing metrics). Do this *before* Terraform exists —
    guardrails must predate resources.
+
+   > **Reality check (2026-07-03):** the account is on the post-July-2025 **free account
+   > plan** ($100 + up to $100 earned credits, 6-month window, *cannot incur charges*).
+   > Budgets are done; the CloudWatch billing alarm is **deferred** — it's meaningless until
+   > a paid-plan upgrade, since a free-plan account bills $0 by construction. Revisit at the
+   > Phase 3 upgrade decision.
 4. Terraform `infra/persistent`: create the **TF state bucket by hand in the S3 Console**
    (versioning on — standard one-time bootstrap), then Terraform everything else: S3 buckets,
    ECR repo (lifecycle policy: keep last 3 images — ECR free tier is 500 MB), GitHub OIDC
@@ -197,8 +205,10 @@ of this skeleton.
    `evaluate.py` produces confusion matrix + per-class metrics, `export_onnx.py` exports and
    verifies ONNX output parity vs PyTorch (unit test).
 3. **Serving:** FastAPI app — `POST /predict` (accepts stroke list + PNG), `GET /healthz`,
-   `GET /model-info` (version, metrics). onnxruntime inference. Dockerfile with Lambda Web
-   Adapter. Runs identically via `docker run` locally and on Lambda.
+   `GET /model-info` (version, metrics), `GET /metrics` (Prometheus format via
+   prometheus-fastapi-instrumentator — nothing scrapes it on Lambda, but it makes the image
+   observability-ready for Phase 3 at zero extra cost). onnxruntime inference. Dockerfile with
+   Lambda Web Adapter. Runs identically via `docker run` locally and on Lambda.
 4. **Deploy:** add Lambda (container image) + Function URL to `infra/persistent`; CORS allowlist
    = `https://monishkamwal.github.io` + localhost. Manual image push for now (automation is Phase 2).
 5. **Frontend:** canvas demo page on the portfolio home (see `PORTFOLIO_PLAN.md`) calling the
@@ -280,6 +290,13 @@ negligible).
 **Goals:** Demonstrate real Kubernetes deployment via IaC — provisioned, exercised, evidenced,
 and destroyed automatically, at ~$0 idle cost.
 
+> **Account-plan gate (added 2026-07-03):** the account is on the free plan, which blocks a
+> subset of credit-hungry services — EKS is likely among them. **Task 0:** check the EKS
+> console; if blocked, upgrade to the paid plan first (direct upgrade carries remaining
+> credits over) and only then create the ephemeral root. The deferred CloudWatch billing
+> alarm from Phase 0 becomes mandatory at the moment of upgrade — that's when real charges
+> become possible.
+
 **Tasks:**
 1. **Terraform `infra/ephemeral`:** `terraform-aws-modules/vpc` (2 AZ, single NAT) +
    `terraform-aws-modules/eks` (K8s 1.31+, one managed node group: 2× t3.medium **spot**).
@@ -301,14 +318,22 @@ and destroyed automatically, at ~$0 idle cost.
    `terraform destroy` against ephemeral state unconditionally, then a boto3 sweeper script that
    lists any surviving EKS clusters / EC2 / NAT gateways / EIPs / ELBs carrying the project tag
    and deletes them, then posts a summary. Also `workflow_dispatch`-able as the "break glass" button.
-5. (Stretch, only if time allows) kube-prometheus-stack installed during the run; Grafana
-   screenshots via its render API added to evidence.
+5. **Observability (Prometheus + Grafana):** install **kube-prometheus-stack** via Helm at the
+   start of each run; a `ServiceMonitor` in the API chart points Prometheus at the FastAPI
+   `/metrics` endpoint (instrumented since Phase 1). Grafana dashboards live as JSON in
+   `deploy/grafana/dashboards/` and are provisioned via Helm values — **dashboards as code**,
+   nothing hand-built in the UI. Two dashboards: API (p50/p95/p99 latency, RPS, error rate,
+   in-flight requests) and cluster (node/pod CPU + memory). The k6 load test then has a live
+   audience: capture dashboard PNGs via Grafana's render endpoint during and after the load
+   window → evidence hub.
 
-**Tools introduced:** Terraform AWS modules, EKS, Helm, k6.
+**Tools introduced:** Terraform AWS modules, EKS, Helm, k6, Prometheus + Grafana
+(kube-prometheus-stack).
 
 **Demoable:** The weekly workflow's run page (public!) showing apply → deploy → test → destroy,
-and the evidence hub page with the k6 report and cluster snapshots. "Here's my cluster from last
-Tuesday; it no longer exists, and here's the proof it worked" is exactly the ephemeral-infra story.
+and the evidence hub page with the k6 report, Grafana dashboards mid-load-test, and cluster
+snapshots. "Here's my cluster from last Tuesday under load; it no longer exists, and here's the
+dashboard proving it handled it" is exactly the ephemeral-infra story.
 
 **Estimated AWS cost:** per run (~90 min): EKS control plane $0.15 + 2× t3.medium spot ~$0.04 +
 NAT ~$0.08 + misc ≈ **$0.30–0.60/run → $2–3/mo**. A *leaked* cluster would be ~$8/day — hence
@@ -316,6 +341,7 @@ the failsafe design (see §6).
 
 **Definition of done:**
 - [ ] Two consecutive scheduled runs complete apply→destroy unattended with published evidence
+- [ ] Grafana dashboards (provisioned from repo JSON) captured under k6 load in those runs
 - [ ] Kill-test passed: cancel the workflow mid-run, confirm failsafe destroys everything within its window
 - [ ] `aws resourcegroupstaggingapi get-resources --tag-filters Key=project...` returns zero ephemeral resources the morning after a run
 - [ ] Cost Explorer shows the run cost within estimate
