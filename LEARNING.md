@@ -4,6 +4,28 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-04 — Validation day: the lockfile is code, and blind thresholds meet reality
+
+- **`uv sync --locked` turns dependency drift into a loud build failure.** Adding
+  numpy/pillow/pyyaml to `pyproject.toml` on a machine without uv left `uv.lock`
+  stale, so CI went red *by construction* — which is the design working, not a bug:
+  the lockfile is part of the code, and the fix is one `uv sync` plus committing the
+  regenerated lock, never fiddling with CI.
+- **The blind-written layer passed first contact: 30/30 tests.** Everything authored
+  without execution on the work laptop passed its first-ever run — including the
+  *guessed* stroke-vs-PNG closeness thresholds (IoU > 0.4, mad < 0.15). The bet that
+  paid off: deterministic functions, explicit contracts, and closeness bounds designed
+  to be calibrated later rather than asserted exactly.
+- **Raw QuickDraw is much bigger than what you train on.** Each class archive holds
+  every drawing ever submitted — 90–230 MB per class, ~1.7 GB for 15 classes — and
+  preprocessing samples 10k/class into one compact uint8 `.npz`. Fifteen large
+  downloads is also where the atomic `.part`+rename / skip-existing logic earns its
+  keep: an interrupted download can't leave a truncated archive that poisons later
+  runs, and re-runs cost nothing.
+- **A formatter-only diff is a good signal.** `ruff format` changed one file and zero
+  logic — the entire executable delta from "written blind" to "validated" was
+  whitespace.
+
 ## 2026-07-04 — First real `terraform apply`: the region follows the bootstrap bucket
 
 - **The project region was decided by a bucket.** The plan said us-east-1, but the

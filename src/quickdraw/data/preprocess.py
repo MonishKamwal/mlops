@@ -100,9 +100,7 @@ def rasterize_strokes(strokes: Strokes, *, line_width: int = LINE_WIDTH) -> np.n
     draw = ImageDraw.Draw(canvas)
     half = RENDER_SIZE / 2
     for points in points_per_stroke:
-        mapped = [
-            ((x - center_x) * scale + half, (y - center_y) * scale + half) for x, y in points
-        ]
+        mapped = [((x - center_x) * scale + half, (y - center_y) * scale + half) for x, y in points]
         if len(mapped) == 1:
             x, y = mapped[0]
             radius = line_width / 2
