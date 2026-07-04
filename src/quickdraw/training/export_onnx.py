@@ -58,6 +58,10 @@ def export_model(checkpoint_path: Path, onnx_path: Path) -> Path:
         prop = onnx_model.metadata_props.add()
         prop.key, prop.value = key, value
     onnx.save(onnx_model, str(onnx_path))
+    # torch's exporter may write weights to a sidecar <name>.data file; the re-save
+    # above folded everything into the .onnx, so the sidecar is an orphan — drop it
+    # (serving must only ever need the one file)
+    onnx_path.with_name(onnx_path.name + ".data").unlink(missing_ok=True)
     return onnx_path
 
 

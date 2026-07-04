@@ -4,6 +4,26 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-04 — First training run: 0.915, and two artifact gotchas
+
+- **`mlflow ui` doesn't find sqlite-backed runs on its own.** MLflow separates the
+  *tracking store* (run metadata — here `mlflow.db`) from the *artifact store* (files —
+  here `mlruns/`). A bare `mlflow ui` reads `./mlruns` as a file-based *tracking*
+  store, finds no metadata there, and shows an empty UI — even though the run recorded
+  perfectly. The UI is just another client and needs the same connection string the
+  code used: `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`.
+- **torch's ONNX exporter left a decoy.** The dynamo exporter wrote weights to a
+  `model.onnx.data` sidecar; our metadata step (`onnx.load` → `onnx.save`) folded them
+  back into a single self-contained `.onnx`, orphaning the sidecar — which, at the same
+  size as the model, looked load-bearing. Verified `model.onnx` runs alone; export now
+  deletes the stray, with a regression test pinning "serving ships exactly one file".
+- **The 0.88 target fell in epoch 2; humans and CNNs agree on what's hard.** Final val
+  accuracy 0.9151 with the curve still climbing at epoch 8 — on clean, plentiful data a
+  ~420k-param CNN clears a portfolio-grade bar without tuning. The errors concentrate
+  exactly where a person squinting at 28×28 doodles would struggle: dog, bird, and cat
+  are the three worst classes (F1 0.77–0.84) while geometric shapes sail past 0.95 —
+  there are many more ways to draw a dog than a star.
+
 ## 2026-07-04 — Building the training layer: the model is the easy part
 
 - **PyTorch's default Linux wheel is a CUDA wheel.** A plain `torch` dependency drags

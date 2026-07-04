@@ -57,6 +57,12 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-04 (personal laptop, night)** — Phase 1 task 2 **executed** (Monish ran
+  the pipeline): 8 epochs, val_accuracy 0.859 → 0.9151, test 0.9157, macro F1 0.9162;
+  worst classes dog/bird/cat (F1 0.77–0.84). `export_onnx` parity OK. Two gotchas,
+  both in LEARNING.md: bare `mlflow ui` reads `./mlruns` and misses sqlite runs
+  (needs `--backend-store-uri sqlite:///mlflow.db`); torch's exporter left an orphan
+  `model.onnx.data` sidecar — export now deletes it (+ regression test, 47 total).
 - **2026-07-04 (personal laptop, evening)** — Phase 1 task 2 code (branch
   `phase1-training`): `training:` section in params.yaml + typed loader;
   `QuickDrawCNN` (2 conv blocks + FC head, ~420k params); `train.py` (MLflow to
@@ -113,24 +119,15 @@ workflow runs green (verified 2026-07-04; meets PORTFOLIO_PLAN.md's phase-0 done
 The earlier "not started" note here was wrong.
 
 Phase 1 task 1 (data layer) is merged (PR #2) — CI on main is green. Phase 1 task 2
-(training) code is written on branch `phase1-training`: 46/46 tests pass locally, but
-the **full training run has not been executed** — the ≥ 88% val-accuracy DoD is
-unverified until it runs.
+(training) is **done pending merge** (branch `phase1-training`, PR #3, CI green).
+Trained 2026-07-04: best **val_accuracy 0.9151** (epoch 8/8, curve still climbing;
+DoD ≥ 0.88 passed at epoch 2), **test_accuracy 0.9157**, macro F1 0.9162 — hardest
+classes are the animals (F1: dog 0.77, bird 0.79, cat 0.84). `models/model.onnx`
+exported, parity OK, single self-contained file with the class list in its metadata.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Run the Phase 1 training pipeline** on branch `phase1-training` (personal laptop —
-needs `data/processed/quickdraw.npz` from the validated data layer):
-
-1. `uv run python -m quickdraw.training.train` — 8 epochs over 120k samples; the DoD
-   is `val_accuracy ≥ 0.88`. Inspect the run afterwards with
-   `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`.
-2. `uv run python -m quickdraw.training.evaluate` — writes `reports/eval/metrics.json`
-   + `confusion_matrix.png` from the test split.
-3. `uv run python -m quickdraw.training.export_onnx` — writes `models/model.onnx`;
-   must print "parity OK".
-4. Record the val/test accuracy here, update LEARNING.md if anything surprised,
-   commit → push → PR → main.
+**Merge PR #3** (`phase1-training`) — that closes Phase 1 task 2.
 
 **Then Phase 1 task 3 (serving):** FastAPI app (`POST /predict` stroke list + PNG,
 `GET /healthz`, `GET /model-info`, `GET /metrics` via

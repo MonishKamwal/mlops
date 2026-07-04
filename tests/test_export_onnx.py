@@ -33,6 +33,13 @@ def test_onnx_output_matches_pytorch(checkpoint_path: Path, tmp_path: Path) -> N
     assert difference <= PARITY_TOLERANCE
 
 
+def test_export_is_a_single_self_contained_file(checkpoint_path: Path, tmp_path: Path) -> None:
+    """Serving ships exactly one model file — no orphan external-weights sidecar."""
+    onnx_path = export_model(checkpoint_path, tmp_path / "model.onnx")
+    assert not onnx_path.with_name(onnx_path.name + ".data").exists()
+    assert list(tmp_path.glob("*.onnx*")) == [onnx_path]
+
+
 def test_classes_embedded_in_onnx_metadata(checkpoint_path: Path, tmp_path: Path) -> None:
     onnx_path = export_model(checkpoint_path, tmp_path / "model.onnx")
     session = onnxruntime.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
