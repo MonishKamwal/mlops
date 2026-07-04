@@ -4,6 +4,33 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-04 — Building the training layer: the model is the easy part
+
+- **PyTorch's default Linux wheel is a CUDA wheel.** A plain `torch` dependency drags
+  ~2.5 GB of NVIDIA libraries into every CI run and lockfile — for a project that
+  trains on a laptop and serves on Lambda, pure waste. The fix is a `[tool.uv.index]`
+  entry for `download.pytorch.org/whl/cpu` plus a `[tool.uv.sources]` pin: torch (and
+  only torch) resolves from the CPU index on every platform.
+- **Dependency groups split train-time from serve-time.** torch/MLflow/onnx live in a
+  `train` group, not in `[project.dependencies]` — the Phase 1 serving image should
+  install onnxruntime, never torch. `[tool.uv] default-groups` keeps plain `uv sync`
+  (and CI's `uv sync --locked`) installing everything, so the split costs nothing day
+  to day.
+- **The last epoch is not the best epoch.** Validation accuracy can peak before
+  training ends, so `train.py` keeps the best-val-epoch weights in memory and writes
+  those — checkpoint-the-best is early stopping's cheaper cousin: same artifact
+  quality, no schedule tuning.
+- **ONNX export is the second train/serve skew gap.** Task 1 closed preprocessing skew
+  with one shared transform; the PyTorch→onnxruntime hop is another place outputs can
+  silently diverge. So export ends with a parity check — the same batch through both
+  runtimes, max |logit difference| under 1e-4. Bit-exact equality across different
+  kernels is unattainable; tolerance, not `==`, and torch ≥ 2.9's dynamo-based
+  exporter needs the separate `onnxscript` package (learned via test failure).
+- **Model artifacts should be self-describing.** The class list is baked into both the
+  checkpoint and the ONNX metadata: a model file that can't say what its output
+  indices mean forces serving to trust an out-of-band params.yaml version — label
+  mapping is part of the model, not the config.
+
 ## 2026-07-04 — Validation day: the lockfile is code, and blind thresholds meet reality
 
 - **`uv sync --locked` turns dependency drift into a loud build failure.** Adding

@@ -226,6 +226,10 @@ mlruns/
 # Dataset files (DVC-managed from Phase 2; pointers only in git)
 /data/
 
+# Model artifacts + evaluation reports (DVC-managed from Phase 2)
+/models/
+/reports/
+
 # Terraform
 .terraform/
 *.tfstate

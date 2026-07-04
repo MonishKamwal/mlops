@@ -57,6 +57,16 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-04 (personal laptop, evening)** — Phase 1 task 2 code (branch
+  `phase1-training`): `training:` section in params.yaml + typed loader;
+  `QuickDrawCNN` (2 conv blocks + FC head, ~420k params); `train.py` (MLflow to
+  sqlite, best-val-epoch checkpoint with the class list embedded); `evaluate.py`
+  (pure-numpy confusion matrix + per-class metrics, PNG heatmap); `export_onnx.py`
+  (dynamic batch axis, classes in ONNX metadata, PyTorch-vs-ONNX parity check).
+  New `train` dependency group with torch pinned to the CPU wheel index;
+  `default-groups` keeps CI's `uv sync --locked` working unchanged. 46/46 tests
+  pass; **training itself not yet run**. Also verified Phase 0 task 5 was already
+  complete (portfolio Pages deploys green) → Phase 0 closed.
 - **2026-07-04 (personal laptop)** — Phase 1 task 1 **validated** (branch
   `phase1-validate`): `uv sync` regenerated `uv.lock` (numpy 2.5.1, pillow 12.3.0);
   `ruff format` reformatted only `data/preprocess.py`, `ruff check` clean; **30/30
@@ -96,26 +106,36 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Current state
 
-Phase 0: tasks 1–4 done (billing alarm deferred by design) — `infra/persistent` is
-applied and idempotent in us-east-2; GitHub repo variables set. Task 5 (portfolio repo
-scaffold) not started. Phase 1 task 1 (data layer) is **validated** on branch
-`phase1-validate`: lock regenerated, lint clean, 30/30 tests passed first run, pipeline
-smoke-tested end to end (~1.7 GB raw → `data/processed/quickdraw.npz`). Branch not yet
-committed/merged — CI on main stays red until it lands.
+**Phase 0 is complete.** Tasks 1–4 as before (billing alarm deferred by design); task 5
+(portfolio scaffold) turned out to be **already done** — the `monishkamwal.github.io`
+repo has the Next.js static-export skeleton committed and its "Deploy to GitHub Pages"
+workflow runs green (verified 2026-07-04; meets PORTFOLIO_PLAN.md's phase-0 done-when).
+The earlier "not started" note here was wrong.
+
+Phase 1 task 1 (data layer) is merged (PR #2) — CI on main is green. Phase 1 task 2
+(training) code is written on branch `phase1-training`: 46/46 tests pass locally, but
+the **full training run has not been executed** — the ≥ 88% val-accuracy DoD is
+unverified until it runs.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Land `phase1-validate`:** commit `uv.lock` + `src/quickdraw/data/preprocess.py`
-(formatter-only diff) + this file + `LEARNING.md` → push → PR → main. The PR's CI run
-is the first with the regenerated lock and must be green; main goes green on merge.
+**Run the Phase 1 training pipeline** on branch `phase1-training` (personal laptop —
+needs `data/processed/quickdraw.npz` from the validated data layer):
 
-**Then Phase 0 task 5:** portfolio repo scaffold (see `PORTFOLIO_PLAN.md` in the
-`monishkamwal.github.io` repo) — the last open Phase 0 item.
+1. `uv run python -m quickdraw.training.train` — 8 epochs over 120k samples; the DoD
+   is `val_accuracy ≥ 0.88`. Inspect the run afterwards with
+   `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`.
+2. `uv run python -m quickdraw.training.evaluate` — writes `reports/eval/metrics.json`
+   + `confusion_matrix.png` from the test split.
+3. `uv run python -m quickdraw.training.export_onnx` — writes `models/model.onnx`;
+   must print "parity OK".
+4. Record the val/test accuracy here, update LEARNING.md if anything surprised,
+   commit → push → PR → main.
 
-**Then Phase 1 task 2 (training):** small CNN in PyTorch (~2 conv blocks + FC,
-target ≥ 88% val accuracy); `train.py` logs to local MLflow (`sqlite:///mlflow.db`);
-`evaluate.py` (confusion matrix, per-class metrics); `export_onnx.py` + ONNX-vs-PyTorch
-parity unit test (PLAN.md Phase 1, task 2).
+**Then Phase 1 task 3 (serving):** FastAPI app (`POST /predict` stroke list + PNG,
+`GET /healthz`, `GET /model-info`, `GET /metrics` via
+prometheus-fastapi-instrumentator), onnxruntime inference, Dockerfile with Lambda Web
+Adapter — one image for local `docker run` and Lambda (PLAN.md Phase 1, task 3).
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
 uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
