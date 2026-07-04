@@ -57,6 +57,8 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-04 (personal laptop, wrap-up)** — PR #3 merged → **Phase 1 task 2
+  closed**; `phase1-serving` branch created and pushed (empty) for task 3.
 - **2026-07-04 (personal laptop, night)** — Phase 1 task 2 **executed** (Monish ran
   the pipeline): 8 epochs, val_accuracy 0.859 → 0.9151, test 0.9157, macro F1 0.9162;
   worst classes dog/bird/cat (F1 0.77–0.84). `export_onnx` parity OK. Two gotchas,
@@ -118,21 +120,24 @@ repo has the Next.js static-export skeleton committed and its "Deploy to GitHub 
 workflow runs green (verified 2026-07-04; meets PORTFOLIO_PLAN.md's phase-0 done-when).
 The earlier "not started" note here was wrong.
 
-Phase 1 task 1 (data layer) is merged (PR #2) — CI on main is green. Phase 1 task 2
-(training) is **done pending merge** (branch `phase1-training`, PR #3, CI green).
-Trained 2026-07-04: best **val_accuracy 0.9151** (epoch 8/8, curve still climbing;
-DoD ≥ 0.88 passed at epoch 2), **test_accuracy 0.9157**, macro F1 0.9162 — hardest
-classes are the animals (F1: dog 0.77, bird 0.79, cat 0.84). `models/model.onnx`
-exported, parity OK, single self-contained file with the class list in its metadata.
+Phase 1 tasks 1 (data layer) and 2 (training) are **merged** (PRs #2, #3) — CI on main
+is green. Training run 2026-07-04: best **val_accuracy 0.9151** (epoch 8/8, curve
+still climbing; DoD ≥ 0.88 passed at epoch 2), **test_accuracy 0.9157**, macro F1
+0.9162 — hardest classes are the animals (F1: dog 0.77, bird 0.79, cat 0.84).
+`models/model.onnx` exported, parity OK, single self-contained file with the class
+list in its metadata. Branch `phase1-serving` exists (local + origin, no commits yet)
+ready for task 3.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Merge PR #3** (`phase1-training`) — that closes Phase 1 task 2.
-
-**Then Phase 1 task 3 (serving):** FastAPI app (`POST /predict` stroke list + PNG,
+**Phase 1 task 3 (serving), on branch `phase1-serving`:** FastAPI app —
+`POST /predict` (stroke list + PNG, both through the shared preprocess module),
 `GET /healthz`, `GET /model-info`, `GET /metrics` via
-prometheus-fastapi-instrumentator), onnxruntime inference, Dockerfile with Lambda Web
+prometheus-fastapi-instrumentator; onnxruntime inference reading the class list from
+the ONNX metadata (no torch, no params.yaml in the image); Dockerfile with Lambda Web
 Adapter — one image for local `docker run` and Lambda (PLAN.md Phase 1, task 3).
+Serving deps (fastapi, onnxruntime, ...) go in `[project.dependencies]` — the
+`train` dependency group split was designed for exactly this.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
 uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
