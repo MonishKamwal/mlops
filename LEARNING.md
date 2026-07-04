@@ -4,6 +4,53 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-04 — First training run: 0.915, and two artifact gotchas
+
+- **`mlflow ui` doesn't find sqlite-backed runs on its own.** MLflow separates the
+  *tracking store* (run metadata — here `mlflow.db`) from the *artifact store* (files —
+  here `mlruns/`). A bare `mlflow ui` reads `./mlruns` as a file-based *tracking*
+  store, finds no metadata there, and shows an empty UI — even though the run recorded
+  perfectly. The UI is just another client and needs the same connection string the
+  code used: `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`.
+- **torch's ONNX exporter left a decoy.** The dynamo exporter wrote weights to a
+  `model.onnx.data` sidecar; our metadata step (`onnx.load` → `onnx.save`) folded them
+  back into a single self-contained `.onnx`, orphaning the sidecar — which, at the same
+  size as the model, looked load-bearing. Verified `model.onnx` runs alone; export now
+  deletes the stray, with a regression test pinning "serving ships exactly one file".
+- **The 0.88 target fell in epoch 2; humans and CNNs agree on what's hard.** Final val
+  accuracy 0.9151 with the curve still climbing at epoch 8 — on clean, plentiful data a
+  ~420k-param CNN clears a portfolio-grade bar without tuning. The errors concentrate
+  exactly where a person squinting at 28×28 doodles would struggle: dog, bird, and cat
+  are the three worst classes (F1 0.77–0.84) while geometric shapes sail past 0.95 —
+  there are many more ways to draw a dog than a star.
+
+## 2026-07-04 — Building the training layer: the model is the easy part
+
+- **PyTorch's default Linux wheel is a CUDA wheel.** A plain `torch` dependency drags
+  ~2.5 GB of NVIDIA libraries into every CI run and lockfile — for a project that
+  trains on a laptop and serves on Lambda, pure waste. The fix is a `[tool.uv.index]`
+  entry for `download.pytorch.org/whl/cpu` plus a `[tool.uv.sources]` pin: torch (and
+  only torch) resolves from the CPU index on every platform.
+- **Dependency groups split train-time from serve-time.** torch/MLflow/onnx live in a
+  `train` group, not in `[project.dependencies]` — the Phase 1 serving image should
+  install onnxruntime, never torch. `[tool.uv] default-groups` keeps plain `uv sync`
+  (and CI's `uv sync --locked`) installing everything, so the split costs nothing day
+  to day.
+- **The last epoch is not the best epoch.** Validation accuracy can peak before
+  training ends, so `train.py` keeps the best-val-epoch weights in memory and writes
+  those — checkpoint-the-best is early stopping's cheaper cousin: same artifact
+  quality, no schedule tuning.
+- **ONNX export is the second train/serve skew gap.** Task 1 closed preprocessing skew
+  with one shared transform; the PyTorch→onnxruntime hop is another place outputs can
+  silently diverge. So export ends with a parity check — the same batch through both
+  runtimes, max |logit difference| under 1e-4. Bit-exact equality across different
+  kernels is unattainable; tolerance, not `==`, and torch ≥ 2.9's dynamo-based
+  exporter needs the separate `onnxscript` package (learned via test failure).
+- **Model artifacts should be self-describing.** The class list is baked into both the
+  checkpoint and the ONNX metadata: a model file that can't say what its output
+  indices mean forces serving to trust an out-of-band params.yaml version — label
+  mapping is part of the model, not the config.
+
 ## 2026-07-04 — Validation day: the lockfile is code, and blind thresholds meet reality
 
 - **`uv sync --locked` turns dependency drift into a loud build failure.** Adding

@@ -26,6 +26,43 @@ class DataParams:
     test_fraction: float
 
 
+@dataclass(frozen=True)
+class TrainingParams:
+    """The ``training:`` section of params.yaml."""
+
+    epochs: int
+    batch_size: int
+    learning_rate: float
+    weight_decay: float
+    dropout: float
+    seed: int
+
+
+def load_training_params(path: str | Path = "params.yaml") -> TrainingParams:
+    """Load and validate the ``training:`` section of a params file."""
+    raw = yaml.safe_load(Path(path).read_text())
+    training = raw["training"]
+    params = TrainingParams(
+        epochs=int(training["epochs"]),
+        batch_size=int(training["batch_size"]),
+        learning_rate=float(training["learning_rate"]),
+        weight_decay=float(training["weight_decay"]),
+        dropout=float(training["dropout"]),
+        seed=int(training["seed"]),
+    )
+    if params.epochs <= 0:
+        raise ValueError("params.yaml: epochs must be positive")
+    if params.batch_size <= 0:
+        raise ValueError("params.yaml: batch_size must be positive")
+    if params.learning_rate <= 0:
+        raise ValueError("params.yaml: learning_rate must be positive")
+    if params.weight_decay < 0:
+        raise ValueError("params.yaml: weight_decay must be non-negative")
+    if not 0 <= params.dropout < 1:
+        raise ValueError("params.yaml: dropout must be in [0, 1)")
+    return params
+
+
 def load_data_params(path: str | Path = "params.yaml") -> DataParams:
     """Load and validate the ``data:`` section of a params file."""
     raw = yaml.safe_load(Path(path).read_text())
