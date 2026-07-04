@@ -4,6 +4,36 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-04 — First real `terraform apply`: the region follows the bootstrap bucket
+
+- **The project region was decided by a bucket.** The plan said us-east-1, but the
+  hand-made state bucket landed in us-east-2. Since nothing in this project is
+  region-bound (the one us-east-1-only piece — the CloudWatch billing alarm — is
+  deferred anyway), the cheapest correct move was to follow the bucket: change two
+  literals in code rather than recreate a resource. Region is configuration, not
+  identity; MEMORY.md had even pre-authorized exactly this swap.
+- **S3 bucket names are globally unique** — across *all* AWS accounts, not per
+  account. That's why the buckets carry random suffixes (`-k7f2`, `-ab1b`): a plain
+  descriptive name may already be taken by anyone in the world.
+- **AWS region strings become endpoint DNS names verbatim.** A typo'd region in
+  `aws configure` (`east-us-2`) failed with *"Could not connect to the endpoint URL:
+  https://sts.east-us-2.amazonaws.com"* — a connection error, not an auth error,
+  because the SDK mechanically builds `<service>.<region>.amazonaws.com`. Lesson:
+  endpoint-URL errors mean "check the region string", not "check the credentials".
+- **Idempotency is the proof that IaC is telling the truth.** The definition of done
+  wasn't "apply succeeded" but "the *second* apply prints `No changes.`" — evidence
+  the code describes a fixed point it converges to, rather than a script that happens
+  to run. First apply: 12 resources; second: zero.
+- **Terraform outputs never need saving.** They live in the state file and
+  `terraform output` reprints them anytime. Nothing in them is secret here (bucket
+  names, ECR URL, role ARN — fine for a public repo). Related UI nicety: GitHub
+  Actions variables are literal strings — paste values *without* quotes, or the
+  quotes become part of the value.
+- **Code written blind survived contact with reality.** The whole `infra/persistent`
+  root was authored on a laptop with no terraform binary; the first-ever
+  `fmt`/`validate`/`apply` ran clean. Small, boring, well-documented resources are a
+  repeatable recipe for that.
+
 ## 2026-07-03 — The data layer: one preprocessing path, or train/serve skew wins
 
 - **Train/serve skew is an architecture problem, not a testing problem.** The classic

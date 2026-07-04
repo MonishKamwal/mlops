@@ -22,9 +22,17 @@ is the long-term what-and-why; this file is the current state and the exact next
   CloudWatch billing alarm is deliberately **deferred**: a free-plan account bills $0 by
   construction. It becomes mandatory the day the account upgrades to paid (PLAN.md
   Phase 3, Task 0).
-- **Region: us-east-1 for the whole project** (state bucket + all resources) —
-  defaulted in `infra/persistent/variables.tf` and `backend.tf`; if the hand-made
-  state bucket ends up elsewhere, update both plus this line.
+- **Region: us-east-2 for the whole project** (state bucket + all resources). The
+  hand-made state bucket landed in us-east-2 (2026-07-04) and nothing in the project
+  is region-bound, so the project followed it — `infra/persistent/variables.tf` and
+  `backend.tf` both say us-east-2. TF state bucket: `mlops-quickdraw-tfstate-k7f2`
+  (hand-made in the S3 Console, versioning on).
+- **Persistent infra is live** (applied 2026-07-04, account `152439497402`): data
+  bucket `mlops-quickdraw-data-ab1b`, logs bucket `mlops-quickdraw-logs-ab1b`, ECR
+  `152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api`, CI role
+  `arn:aws:iam::152439497402:role/gha-app`. GitHub Actions repo variables
+  `AWS_REGION` and `GHA_APP_ROLE_ARN` are set. The OIDC assume-role path has never
+  been exercised — first real use comes with the Phase 2 workflows.
 - GitHub: `MonishKamwal/mlops`, trunk-based (feature branch → PR → main). Stale
   `develop`/`staging` remote branches were deleted 2026-07-03.
 - Working style (PLAN.md preamble): one-time/admin actions happen via **web UI** by Monish —
@@ -49,6 +57,14 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-04 (personal laptop)** — Phase 0 task 4 **done** (branch
+  `phase0-apply-persistent`): merged `phase0-infra-persistent` + `phase1-data-layer`
+  to main (clean fast-forwards, in that order); hand-made the state bucket
+  `mlops-quickdraw-tfstate-k7f2` (landed in us-east-2 → whole project moved to
+  us-east-2); AWS CLI + IAM-user auth set up (region typo `east-us-2` → STS endpoint
+  connection error, see LEARNING.md); `terraform init/fmt/validate/apply` clean —
+  12 resources created, second apply printed "No changes" (idempotency DoD met);
+  GitHub Actions variables `AWS_REGION` + `GHA_APP_ROLE_ARN` added via UI.
 - **2026-07-03 (work laptop)** — Phase 1 task 1 code (branch `phase1-data-layer`,
   stacked on `phase0-infra-persistent`): `params.yaml` + typed loader
   (`quickdraw/config.py`; class order = label index); `data/download.py` (GCS bitmap
@@ -73,46 +89,37 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Current state
 
-Phase 0: tasks 1–3 done (billing alarm deferred by design). Task 4: `infra/persistent/`
-Terraform code written, **not yet validated or applied** — needs the hand-made state
-bucket, then `init`/`apply` from the personal laptop. Task 5 (portfolio repo scaffold)
-not started. Phase 1 task 1 (data layer) code written on branch `phase1-data-layer`
-(stacked on `phase0-infra-persistent`), **never executed** — no tests, lint, or
-downloads have run, and `uv.lock` is stale vs pyproject (numpy/pillow/pyyaml added),
-so CI is red on that branch by construction until `uv lock` runs at home.
+Phase 0: tasks 1–4 done (billing alarm deferred by design) — `infra/persistent` is
+applied and idempotent in us-east-2; GitHub repo variables set. Task 5 (portfolio repo
+scaffold) not started. Phase 1 task 1 (data layer) code is merged to main but **never
+executed** — no tests, lint, or downloads have run, and `uv.lock` is stale vs pyproject
+(numpy/pillow/pyyaml added), so **CI on main is red by construction** until the lock is
+regenerated and committed.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Finish Phase 0, task 4: bootstrap + apply the `infra/persistent` root** (code is
-written; everything below except step 1 needs the personal laptop).
+**First, land the bookkeeping branch `phase0-apply-persistent`:** commit
+`infra/persistent/backend.tf` + `variables.tf` (real bucket, us-east-2) together with
+this file and `LEARNING.md` → push → PR → main. That closes Phase 0 task 4.
 
-1. **Monish, S3 Console (one-time bootstrap):** create the TF state bucket — suggested
-   name `mlops-quickdraw-tfstate-<4 random chars>`, region **us-east-1**, versioning
-   **on**, encryption + block-all-public-access at their secure defaults. Then put the
-   real name in `infra/persistent/backend.tf` (replace `REPLACE_ME`) — or tell Claude.
-2. **Commit** (feature branch → PR → main): `.gitattributes`, `infra/persistent/`,
-   this file, `LEARNING.md`.
-3. **Monish, personal laptop terminal:** install terraform + AWS CLI if missing
-   (`brew install awscli hashicorp/tap/terraform`), authenticate (IAM user or SSO —
-   not root), then in `infra/persistent/`: `terraform init`, `terraform fmt -check`
-   and `terraform validate` (the code has never been through either — no terraform
-   binary on the work laptop), `terraform apply`, then `apply` again — the second run
-   must be a no-op (Phase 0 DoD).
-4. **Monish, GitHub UI:** repo → Settings → Secrets and variables → Actions → Variables:
-   add `AWS_REGION` and `GHA_APP_ROLE_ARN` from the Terraform outputs.
-5. Then Phase 0 task 5 (portfolio repo, see `PORTFOLIO_PLAN.md` there), then Phase 1
-   task 1 (data download/preprocess).
-6. **New since this session — validate the Phase 1 data layer** (branch
-   `phase1-data-layer`, personal laptop, after the phase-0 branch merges):
-   `uv sync` (regenerates `uv.lock` — commit it; CI's `uv sync --locked` is red until
-   it lands), then `uv run ruff format . && uv run ruff check . && uv run pytest` —
-   this code has never executed; expect formatter touch-ups. The stroke-vs-PNG
-   closeness thresholds in `tests/test_data_preprocess.py::test_png_and_stroke_paths_agree`
+**Then validate the Phase 1 data layer** (personal laptop; this also fixes red CI on
+main):
+
+1. New branch off main.
+2. `uv sync` — regenerates `uv.lock` (numpy/pillow/pyyaml were added without it);
+   commit the lock. CI's `uv sync --locked` stays red until this lands.
+3. `uv run ruff format . && uv run ruff check . && uv run pytest` — first-ever
+   execution of this code; expect formatter touch-ups. The stroke-vs-PNG closeness
+   thresholds in `tests/test_data_preprocess.py::test_png_and_stroke_paths_agree`
    (IoU > 0.4, mad < 0.15) are first guesses — calibrate rather than delete if they
-   fail. Then smoke the pipeline: `uv run python -m quickdraw.data.download` (~1.5 GB
-   into gitignored `data/raw/`) and `uv run python -m quickdraw.data.preprocess`.
+   fail.
+4. Smoke the pipeline: `uv run python -m quickdraw.data.download` (~1.5 GB into
+   gitignored `data/raw/`), then `uv run python -m quickdraw.data.preprocess`.
 
-Watch items: `infra/persistent/` has never seen `terraform fmt/validate/apply` — first
-run happens on the personal laptop; the data-layer code has never been executed at
-all; EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint style nits in
+**Then Phase 0 task 5:** portfolio repo scaffold (see `PORTFOLIO_PLAN.md` in the
+`monishkamwal.github.io` repo) — the last open Phase 0 item.
+
+Watch items: the data-layer code has never been executed; the GitHub OIDC
+assume-role path is untested until the first workflow uses it (Phase 2);
+EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint style nits in
 PLAN.md are known and not CI-checked.

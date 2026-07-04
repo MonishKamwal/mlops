@@ -4,9 +4,9 @@
 # locking, no DynamoDB table) requires Terraform >= 1.11.
 terraform {
   backend "s3" {
-    bucket       = "REPLACE_ME" # hand-made tfstate bucket, e.g. mlops-quickdraw-tfstate-xxxx
+    bucket       = "mlops-quickdraw-tfstate-k7f2" # hand-made tfstate bucket, e.g. mlops-quickdraw-tfstate-xxxx
     key          = "persistent/terraform.tfstate"
-    region       = "us-east-1"
+    region       = "us-east-2"
     use_lockfile = true
   }
 }
