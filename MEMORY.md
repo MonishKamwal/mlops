@@ -57,6 +57,15 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-06 (personal laptop, later)** — PR #4 merged → **Phase 1 task 3 closed**.
+  Task 4 Terraform written on `phase1-deploy` (`infra/persistent/lambda.tf`):
+  `quickdraw-api` Lambda (container image from ECR `:latest` var, **arm64**, 1024 MB /
+  30 s, no env — image defaults rule), execution role (`quickdraw-api-exec`, basic
+  logs policy), pre-created log group (14-day retention), public Function URL
+  (explicit `aws_lambda_permission`, CORS: monishkamwal.github.io + localhost:3000),
+  `ignore_changes = [image_uri]` so Phase 2 CI deploys don't get reverted; new output
+  `api_function_url`. `terraform fmt`/`validate` clean (Monish ran them). **Not yet
+  applied** — image must be pushed first.
 - **2026-07-06 (personal laptop)** — Phase 1 task 3 (serving) built and verified
   (branch `phase1-serving`): `serving/predictor.py` (onnxruntime session, classes +
   val_accuracy read from ONNX metadata, input/output names from the graph — no
@@ -148,13 +157,20 @@ Function URL owns it (PLAN.md §2); local-dev CORS is a task-5 question. Branch
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phase 1 task 4 (deploy), on branch `phase1-deploy`:** add Lambda (container image) and
-Function URL to `infra/persistent/`; CORS allowlist `https://monishkamwal.github.io` and
-localhost. The image must exist in ECR **before** the Lambda resource can be created
-→ manual push this once (automation is Phase 2): `docker build` for the Lambda
-architecture (must match `architectures` in the TF — local builds are arm64), ECR
-login + push. Env on Lambda: nothing to set — the image's defaults (`MODEL_PATH`,
-`PORT`, readiness path) are baked in.
+**Execute Phase 1 task 4** (TF already written on `phase1-deploy`), in this order —
+Monish runs these:
+
+1. Build for Lambda (single-manifest arm64 — `--provenance=false`, or Lambda rejects
+   the OCI index) and push, from the repo root:
+   `docker build --provenance=false -t 152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api:latest .`
+   then `aws ecr get-login-password --region us-east-2 | docker login --username AWS
+   --password-stdin 152439497402.dkr.ecr.us-east-2.amazonaws.com` and `docker push` the tag.
+2. `terraform plan` + `apply` in `infra/persistent/` (expect 6 adds), `apply` again → no-op.
+3. Verify: `curl "$(terraform output -raw api_function_url)healthz"`, then POST a
+   drawing to `.../predict`; first hit is the cold start (~seconds), second is warm.
+4. PR `phase1-deploy` → main. Then task 5 (canvas frontend on the portfolio site,
+   cold-start UX) and task 6 (JSONL prediction logging middleware → logs bucket +
+   `s3:PutObject` for the `quickdraw-api-exec` role).
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
 uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
