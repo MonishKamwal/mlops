@@ -57,6 +57,22 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-06 (personal laptop, late night)** — **Phase 1 task 5 closed**: both PRs
+  merged, Monish drew on the live site and got a real prediction — CORS, cold-start
+  UX, and the "stranger can draw" DoD verified in production. **Task 6 code written**
+  (branch `phase1-logging`): `serving/prediction_log.py` — one JSONL object per
+  prediction to `predictions/dt=YYYY-MM-DD/<ts>-<uuid8>.jsonl` (Hive-partitioned for
+  Athena/Phase 4); record = ts, input_sha256 (canonical (1,28,28) float32 input),
+  source, top3, latency_ms (preprocess+inference), model_sha256, service_version.
+  Synchronous write in the request path (Lambda freezes after the response;
+  background tasks lose data), fail-open (S3 outage costs a log line, never a
+  prediction — tested), boto3 lazy-imported with tight timeouts (1 s/3 s, 2
+  attempts), enabled only when `PREDICTION_LOG_BUCKET` is set → docker run/tests
+  stay AWS-free. Terraform: env var on the Lambda + append-only `s3:PutObject` on
+  `predictions/*` for `quickdraw-api-exec`; boto3 added to runtime deps (image will
+  grow ~30 MB). 73/73 tests, ruff + `terraform fmt`/`validate` clean. **Not live
+  yet** — needs apply + image push + manual image deploy (runbook in "Immediate
+  next step").
 - **2026-07-06 (personal laptop, night, later)** — PR #5 merged → **Phase 1 task 4
   closed**. **Task 5 (frontend) built** in the portfolio repo (branch
   `phase1-canvas-live`, PR pending): mock swapped for the live Function URL.
@@ -181,23 +197,38 @@ healthz/model-info/predict with outputs identical to local `docker run`. Terrafo
 ignores `image_uri` drift (Phase 2 CI deploys out-of-band); ECR image is the
 `--provenance=false` arm64 build tagged `:latest`.
 
-**Phase 1 task 5 (frontend) is code-complete, PR pending** (2026-07-06, portfolio repo
-branch `phase1-canvas-live`): the home-page canvas calls the live Function URL —
-strokes only, QuickDraw format, raw canvas coords; `/model-info` warm-up ping on page
-load (also feeds the live class list + model sha/val-acc into the UI); "model waking
-up" state past 2 s; top-3 confidence bars from the real ranked response. Verified
-end-to-end against the live API; site lint+build green.
+**Phase 1 task 5 (frontend) is done and verified in production** (2026-07-06): the
+home-page canvas at monishkamwal.github.io calls the live Function URL — strokes
+only, QuickDraw format; `/model-info` warm-up ping on load feeds the live class list
++ model sha/val-acc; "waking up" state past 2 s; top-3 confidence bars. Monish drew
+on the public site and got a real prediction.
+
+**Phase 1 task 6 (prediction logging v0) is code-complete, not yet live** (branch
+`phase1-logging`): JSONL records to `predictions/dt=YYYY-MM-DD/` in the logs bucket,
+synchronous + fail-open, switched on by `PREDICTION_LOG_BUCKET` (Terraform sets it;
+local stays AWS-free). Needs: apply, image rebuild/push, manual image deploy, then
+the "logs visibly accumulating in S3" DoD check — the last open line of Phase 1.
 
 ## Immediate next step (rolling — keep this precise)
 
-Merge the portfolio PR (`phase1-canvas-live` → main in `monishkamwal.github.io` —
-merging deploys to Pages), then verify the task-5 DoD on the public site: draw at
-monishkamwal.github.io, prediction returns (CORS working, cold-start UX visible).
-Then **Phase 1 task 6 (prediction logging v0)**, the last task of the phase: FastAPI
-middleware → JSONL to the logs bucket (timestamp, input digest, top-3, confidence,
-latency; no PII) + `s3:PutObject` on the logs bucket for the `quickdraw-api-exec`
-role — needs a new image push + apply, and "logs visibly accumulating in S3" is the
-phase DoD line still open.
+Ship task 6 (order matters only mildly — every intermediate state is safe):
+
+1. PR `phase1-logging` → main, merge when CI is green.
+2. `terraform apply` in `infra/persistent/` (adds the exec-role S3 policy + the
+   Lambda env var; plan ≈ 2 add / 1 change; `image_uri` drift stays ignored).
+3. Rebuild + push the image (same as task 4, from repo root):
+   `aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 152439497402.dkr.ecr.us-east-2.amazonaws.com`
+   then `docker buildx build --platform linux/arm64 --provenance=false -t 152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api:latest --push .`
+4. Deploy the new image (pushing `:latest` does NOT update the function — the
+   digest is pinned): Lambda Console → `quickdraw-api` → *Image* tab → **Deploy new
+   image** → Browse images → `quickdraw-api` : `latest` → Save.
+5. Verify the DoD: draw on monishkamwal.github.io a few times → S3 Console →
+   `mlops-quickdraw-logs-ab1b` → `predictions/dt=2026-07-…/` — objects accumulating;
+   open one (S3 Select / download): fields present, no PII. `/healthz` +
+   `/model-info` still answer; canvas still predicts.
+6. That closes **all of Phase 1** — update this file, then start Phase 2 (DVC,
+   CI/CD training pipeline, quality gate, evidence hub; PLAN.md §5 Phase 2). First
+   real exercise of the untested GitHub OIDC assume-role path arrives there.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
 uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
