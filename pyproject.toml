@@ -7,24 +7,28 @@ license = "MIT"
 authors = [{ name = "Monish Kamwal" }]
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "fastapi>=0.115",
     "numpy>=2.1",
+    "onnxruntime>=1.20",
     "pillow>=11.0",
+    "prometheus-fastapi-instrumentator>=7.0",
     "pyyaml>=6.0",
+    "uvicorn>=0.32",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28",  # fastapi.testclient's transport
     "pre-commit>=4.0",
     "pytest>=8.3",
     "ruff>=0.11",
 ]
 # Training-only stack, kept out of [project.dependencies] so the serving image
-# (Phase 1 task 3) can install the runtime deps without torch/MLflow.
+# installs the runtime deps without torch/MLflow (Dockerfile: --no-default-groups).
 train = [
     "matplotlib>=3.9",
     "mlflow>=2.18",
     "onnx>=1.17",
-    "onnxruntime>=1.20",
     "onnxscript>=0.2",  # required by torch>=2.9's default (dynamo) ONNX exporter
     "torch>=2.6",
 ]

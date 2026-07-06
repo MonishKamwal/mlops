@@ -57,6 +57,19 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-06 (personal laptop)** — Phase 1 task 3 (serving) built and verified
+  (branch `phase1-serving`): `serving/predictor.py` (onnxruntime session, classes +
+  val_accuracy read from ONNX metadata, input/output names from the graph — no
+  training imports, subprocess test pins the app torch-free), `serving/app.py`
+  (`POST /predict` strokes and/or base64 PNG through the shared preprocess module,
+  strokes win if both; `/healthz`; `/model-info` incl. model sha256; `/metrics` via
+  instrumentator, healthz/metrics excluded from histograms; model loads in lifespan;
+  preprocess `ValueError`/PIL `OSError` → 400). Serving deps moved to
+  `[project.dependencies]`; onnxruntime out of the `train` group; httpx added to dev.
+  Dockerfile: uv multi-stage (`--no-default-groups`), python:3.12-slim both stages,
+  Lambda Web Adapter 0.9.1, port 8080, `AWS_LWA_READINESS_CHECK_PATH=/healthz`;
+  441 MB. Verified: 62/62 tests; `docker run` → healthz/model-info/predict/metrics
+  all good; a stroke-drawn cat → cat 0.979 with the real model.
 - **2026-07-04 (personal laptop, wrap-up)** — PR #3 merged → **Phase 1 task 2
   closed**; `phase1-serving` branch created and pushed (empty) for task 3.
 - **2026-07-04 (personal laptop, night)** — Phase 1 task 2 **executed** (Monish ran
@@ -125,19 +138,23 @@ is green. Training run 2026-07-04: best **val_accuracy 0.9151** (epoch 8/8, curv
 still climbing; DoD ≥ 0.88 passed at epoch 2), **test_accuracy 0.9157**, macro F1
 0.9162 — hardest classes are the animals (F1: dog 0.77, bird 0.79, cat 0.84).
 `models/model.onnx` exported, parity OK, single self-contained file with the class
-list in its metadata. Branch `phase1-serving` exists (local + origin, no commits yet)
-ready for task 3.
+list in its metadata.
+
+**Phase 1 task 3 (serving) is code-complete on `phase1-serving`** — FastAPI +
+onnxruntime app, Dockerfile with Lambda Web Adapter, verified end-to-end locally via
+`docker run` (see progress log). 62 tests green. Awaiting PR → main. CORS is
+deliberately not in the app: the Function URL owns it (PLAN.md §2); local-dev CORS is
+a task-5 question.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phase 1 task 3 (serving), on branch `phase1-serving`:** FastAPI app —
-`POST /predict` (stroke list + PNG, both through the shared preprocess module),
-`GET /healthz`, `GET /model-info`, `GET /metrics` via
-prometheus-fastapi-instrumentator; onnxruntime inference reading the class list from
-the ONNX metadata (no torch, no params.yaml in the image); Dockerfile with Lambda Web
-Adapter — one image for local `docker run` and Lambda (PLAN.md Phase 1, task 3).
-Serving deps (fastapi, onnxruntime, ...) go in `[project.dependencies]` — the
-`train` dependency group split was designed for exactly this.
+Open the PR for `phase1-serving` → main; after merge, **Phase 1 task 4 (deploy)**:
+add Lambda (container image, arm64 or x86_64 to match the pushed image!) + Function
+URL to `infra/persistent/`, CORS allowlist `https://monishkamwal.github.io` +
+localhost. Image gets to ECR by a **manual push** this once (automation is Phase 2):
+`docker build` for the Lambda architecture, `aws ecr get-login-password` or Console
+click path per working style. Env on Lambda: nothing to set — the image's defaults
+(`MODEL_PATH`, `PORT`, readiness path) are baked in.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
 uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
