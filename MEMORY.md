@@ -148,9 +148,9 @@ Function URL owns it (PLAN.md §2); local-dev CORS is a task-5 question. Branch
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phase 1 task 4 (deploy), on branch `phase1-deploy`:** add Lambda (container image)
-+ Function URL to `infra/persistent/`, CORS allowlist `https://monishkamwal.github.io`
-+ localhost. The image must exist in ECR **before** the Lambda resource can be created
+**Phase 1 task 4 (deploy), on branch `phase1-deploy`:** add Lambda (container image) and
+Function URL to `infra/persistent/`; CORS allowlist `https://monishkamwal.github.io` and
+localhost. The image must exist in ECR **before** the Lambda resource can be created
 → manual push this once (automation is Phase 2): `docker build` for the Lambda
 architecture (must match `architectures` in the TF — local builds are arm64), ECR
 login + push. Env on Lambda: nothing to set — the image's defaults (`MODEL_PATH`,
