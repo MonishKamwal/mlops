@@ -140,21 +140,21 @@ still climbing; DoD ≥ 0.88 passed at epoch 2), **test_accuracy 0.9157**, macro
 `models/model.onnx` exported, parity OK, single self-contained file with the class
 list in its metadata.
 
-**Phase 1 task 3 (serving) is code-complete on `phase1-serving`** — FastAPI +
+**Phase 1 task 3 (serving) is merged** (PR #4, 2026-07-06; CI on main green) — FastAPI +
 onnxruntime app, Dockerfile with Lambda Web Adapter, verified end-to-end locally via
-`docker run` (see progress log). 62 tests green. Awaiting PR → main. CORS is
-deliberately not in the app: the Function URL owns it (PLAN.md §2); local-dev CORS is
-a task-5 question.
+`docker run` (see progress log). 62 tests. CORS is deliberately not in the app: the
+Function URL owns it (PLAN.md §2); local-dev CORS is a task-5 question. Branch
+`phase1-deploy` exists for task 4.
 
 ## Immediate next step (rolling — keep this precise)
 
-Open the PR for `phase1-serving` → main; after merge, **Phase 1 task 4 (deploy)**:
-add Lambda (container image, arm64 or x86_64 to match the pushed image!) + Function
-URL to `infra/persistent/`, CORS allowlist `https://monishkamwal.github.io` +
-localhost. Image gets to ECR by a **manual push** this once (automation is Phase 2):
-`docker build` for the Lambda architecture, `aws ecr get-login-password` or Console
-click path per working style. Env on Lambda: nothing to set — the image's defaults
-(`MODEL_PATH`, `PORT`, readiness path) are baked in.
+**Phase 1 task 4 (deploy), on branch `phase1-deploy`:** add Lambda (container image)
++ Function URL to `infra/persistent/`, CORS allowlist `https://monishkamwal.github.io`
++ localhost. The image must exist in ECR **before** the Lambda resource can be created
+→ manual push this once (automation is Phase 2): `docker build` for the Lambda
+architecture (must match `architectures` in the TF — local builds are arm64), ECR
+login + push. Env on Lambda: nothing to set — the image's defaults (`MODEL_PATH`,
+`PORT`, readiness path) are baked in.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
 uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
