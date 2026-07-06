@@ -57,6 +57,13 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-06 (personal laptop, night)** — Phase 1 task 4 **executed** (Monish ran
+  the AWS-touching steps): arm64 image pushed to ECR (`--provenance=false` build →
+  single-manifest), `terraform apply` created the 6 resources, second apply = no-op
+  (idempotence DoD), and the live Function URL answers: `/healthz` ok, `/model-info`
+  sha256 `a54dd404…` — byte-identical to the local image — and the stroke-cat returns
+  0.979, matching local `docker run` exactly. **The API is live:**
+  `https://u4udjs3pbrr6xlaanmcpdb7bty0amoeh.lambda-url.us-east-2.on.aws/`
 - **2026-07-06 (personal laptop, later)** — PR #4 merged → **Phase 1 task 3 closed**.
   Task 4 Terraform written on `phase1-deploy` (`infra/persistent/lambda.tf`):
   `quickdraw-api` Lambda (container image from ECR `:latest` var, **arm64**, 1024 MB /
@@ -150,27 +157,26 @@ still climbing; DoD ≥ 0.88 passed at epoch 2), **test_accuracy 0.9157**, macro
 list in its metadata.
 
 **Phase 1 task 3 (serving) is merged** (PR #4, 2026-07-06; CI on main green) — FastAPI +
-onnxruntime app, Dockerfile with Lambda Web Adapter, verified end-to-end locally via
-`docker run` (see progress log). 62 tests. CORS is deliberately not in the app: the
-Function URL owns it (PLAN.md §2); local-dev CORS is a task-5 question. Branch
-`phase1-deploy` exists for task 4.
+onnxruntime app, Dockerfile with Lambda Web Adapter, 62 tests. CORS is deliberately not
+in the app: the Function URL owns it (PLAN.md §2); local-dev CORS is a task-5 question.
+
+**Phase 1 task 4 (deploy) is applied and verified live** (2026-07-06, branch
+`phase1-deploy`, PR #5): `quickdraw-api` Lambda (arm64 container image, 1024 MB) +
+public Function URL, CORS allowlist monishkamwal.github.io + localhost:3000 —
+**`https://u4udjs3pbrr6xlaanmcpdb7bty0amoeh.lambda-url.us-east-2.on.aws/`** answers
+healthz/model-info/predict with outputs identical to local `docker run`. Terraform
+ignores `image_uri` drift (Phase 2 CI deploys out-of-band); ECR image is the
+`--provenance=false` arm64 build tagged `:latest`.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Execute Phase 1 task 4** (TF already written on `phase1-deploy`), in this order —
-Monish runs these:
-
-1. Build for Lambda (single-manifest arm64 — `--provenance=false`, or Lambda rejects
-   the OCI index) and push, from the repo root:
-   `docker build --provenance=false -t 152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api:latest .`
-   then `aws ecr get-login-password --region us-east-2 | docker login --username AWS
-   --password-stdin 152439497402.dkr.ecr.us-east-2.amazonaws.com` and `docker push` the tag.
-2. `terraform plan` + `apply` in `infra/persistent/` (expect 6 adds), `apply` again → no-op.
-3. Verify: `curl "$(terraform output -raw api_function_url)healthz"`, then POST a
-   drawing to `.../predict`; first hit is the cold start (~seconds), second is warm.
-4. PR `phase1-deploy` → main. Then task 5 (canvas frontend on the portfolio site,
-   cold-start UX) and task 6 (JSONL prediction logging middleware → logs bucket +
-   `s3:PutObject` for the `quickdraw-api-exec` role).
+Merge PR #5 (`phase1-deploy` → main). Then **Phase 1 task 5 (frontend)**: canvas demo
+page on the portfolio home (`monishkamwal.github.io` repo, per PORTFOLIO_PLAN.md there)
+calling the Function URL — send strokes (and optionally the PNG) as JSON to `/predict`;
+handle cold-start UX: warm-up ping (`GET /healthz`) on page load + "model waking up…"
+state. Then task 6 (prediction logging v0): FastAPI middleware → JSONL to the logs
+bucket (timestamp, input digest, top-3, confidence, latency; no PII) + `s3:PutObject`
+on the logs bucket for the `quickdraw-api-exec` role.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
 uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
