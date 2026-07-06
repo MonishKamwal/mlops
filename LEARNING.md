@@ -4,6 +4,33 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-06 — Wiring a static site to a scale-to-zero API (Phase 1, task 5)
+
+- **A warm-up ping doesn't have to be a no-op.** The plan said "GET /healthz on page
+  load" — but *any* request boots the Lambda, so the frontend fires `GET /model-info`
+  instead. One request does three jobs: warms the cold start while the visitor is
+  still reading the hero text, feeds the "try: cat, bicycle…" prompt from the *live*
+  class list, and gives the UI the model sha256 + val_accuracy to display. Nothing is
+  hard-coded that the API can report about itself.
+- **Function-URL-owned CORS answered the local-dev question for free.** Task 3
+  deliberately kept CORS out of the FastAPI app (doubled headers break browsers) and
+  parked "what about local frontend dev?" for this task. The answer is: nothing —
+  `localhost:3000` is already on the Function URL allowlist, so `next dev` talks
+  straight to the production Lambda. There is no local API tier at all. Verified with
+  `curl -H "Origin: http://localhost:3000"`: the response echoes
+  `Access-Control-Allow-Origin` and `Vary: Origin` shows per-origin matching.
+- **Server-side bounding-box normalization keeps the client dumb.** Because
+  `rasterize_strokes` normalizes every drawing to its own bounding box, the canvas
+  sends raw coordinates in whatever space it draws in — no client-side scaling, no
+  canvas size in the API contract. This is the no-train/serve-skew rule paying rent a
+  second time: preprocessing that lives server-side can't drift when someone redesigns
+  the frontend.
+- **Make the cold start part of the story, not a spinner.** A warm Lambda answers in
+  well under a second, so "in flight > 2 s" is a reliable cold-start detector. The UI
+  uses it to switch from a generic "hmm…" to "the model is waking up — it scales to
+  zero between visitors" — turning the platform's cheapest architectural decision into
+  visible copy instead of apparent slowness.
+
 ## 2026-07-06 — Lambda Terraform: the parts the Console does for you silently
 
 - **A "public" Function URL isn't public until you say so twice.** Setting

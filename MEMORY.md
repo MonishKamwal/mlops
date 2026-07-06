@@ -57,6 +57,19 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-06 (personal laptop, night, later)** — PR #5 merged → **Phase 1 task 4
+  closed**. **Task 5 (frontend) built** in the portfolio repo (branch
+  `phase1-canvas-live`, PR pending): mock swapped for the live Function URL.
+  Strokes go as QuickDraw `[[xs],[ys]]`, raw canvas coords (server bbox-normalizes),
+  **strokes only** — the API prefers strokes when a PNG is also sent, so the PNG
+  would be dead weight (PORTFOLIO_PLAN amended). Cold-start UX: `GET /model-info`
+  on page load is the warm-up ping *and* supplies the live class list + model
+  sha/val-acc for the UI; predicts in flight > 2 s show a "model is waking up"
+  state; status chip warming/live/unreachable. Top-3 of the full ranked response
+  rendered. Verified: site lint+build green; node replay of the exact client flow
+  against the live API (star sketch → 0.831). **Local-dev CORS resolved:** the
+  Function URL allowlists localhost:3000 → `next dev` hits the live Lambda, no
+  app-level CORS ever (task-3 open question closed; see LEARNING.md).
 - **2026-07-06 (personal laptop, night)** — Phase 1 task 4 **executed** (Monish ran
   the AWS-touching steps): arm64 image pushed to ECR (`--provenance=false` build →
   single-manifest), `terraform apply` created the 6 resources, second apply = no-op
@@ -160,23 +173,31 @@ list in its metadata.
 onnxruntime app, Dockerfile with Lambda Web Adapter, 62 tests. CORS is deliberately not
 in the app: the Function URL owns it (PLAN.md §2); local-dev CORS is a task-5 question.
 
-**Phase 1 task 4 (deploy) is applied and verified live** (2026-07-06, branch
-`phase1-deploy`, PR #5): `quickdraw-api` Lambda (arm64 container image, 1024 MB) +
-public Function URL, CORS allowlist monishkamwal.github.io + localhost:3000 —
+**Phase 1 task 4 (deploy) is merged and live** (PR #5, 2026-07-06): `quickdraw-api`
+Lambda (arm64 container image, 1024 MB) + public Function URL, CORS allowlist
+monishkamwal.github.io + localhost:3000 —
 **`https://u4udjs3pbrr6xlaanmcpdb7bty0amoeh.lambda-url.us-east-2.on.aws/`** answers
 healthz/model-info/predict with outputs identical to local `docker run`. Terraform
 ignores `image_uri` drift (Phase 2 CI deploys out-of-band); ECR image is the
 `--provenance=false` arm64 build tagged `:latest`.
 
+**Phase 1 task 5 (frontend) is code-complete, PR pending** (2026-07-06, portfolio repo
+branch `phase1-canvas-live`): the home-page canvas calls the live Function URL —
+strokes only, QuickDraw format, raw canvas coords; `/model-info` warm-up ping on page
+load (also feeds the live class list + model sha/val-acc into the UI); "model waking
+up" state past 2 s; top-3 confidence bars from the real ranked response. Verified
+end-to-end against the live API; site lint+build green.
+
 ## Immediate next step (rolling — keep this precise)
 
-Merge PR #5 (`phase1-deploy` → main). Then **Phase 1 task 5 (frontend)**: canvas demo
-page on the portfolio home (`monishkamwal.github.io` repo, per PORTFOLIO_PLAN.md there)
-calling the Function URL — send strokes (and optionally the PNG) as JSON to `/predict`;
-handle cold-start UX: warm-up ping (`GET /healthz`) on page load + "model waking up…"
-state. Then task 6 (prediction logging v0): FastAPI middleware → JSONL to the logs
-bucket (timestamp, input digest, top-3, confidence, latency; no PII) + `s3:PutObject`
-on the logs bucket for the `quickdraw-api-exec` role.
+Merge the portfolio PR (`phase1-canvas-live` → main in `monishkamwal.github.io` —
+merging deploys to Pages), then verify the task-5 DoD on the public site: draw at
+monishkamwal.github.io, prediction returns (CORS working, cold-start UX visible).
+Then **Phase 1 task 6 (prediction logging v0)**, the last task of the phase: FastAPI
+middleware → JSONL to the logs bucket (timestamp, input digest, top-3, confidence,
+latency; no PII) + `s3:PutObject` on the logs bucket for the `quickdraw-api-exec`
+role — needs a new image push + apply, and "logs visibly accumulating in S3" is the
+phase DoD line still open.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
 uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
