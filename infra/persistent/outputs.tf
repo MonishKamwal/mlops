@@ -22,3 +22,8 @@ output "ecr_repository_url" {
   description = "Container image repository for the serving image."
   value       = aws_ecr_repository.api.repository_url
 }
+
+output "api_function_url" {
+  description = "Public HTTPS endpoint of the serving Lambda (the canvas frontend calls this)."
+  value       = aws_lambda_function_url.api.function_url
+}

@@ -4,6 +4,36 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-06 — Lambda Terraform: the parts the Console does for you silently
+
+- **A "public" Function URL isn't public until you say so twice.** Setting
+  `authorization_type = "NONE"` only disables IAM auth on the URL; invocation still
+  requires a resource-based policy (`aws_lambda_permission` with
+  `function_url_auth_type = "NONE"`, principal `*`). The Console attaches that policy
+  behind the scenes when you click "create Function URL" — Terraform makes the hidden
+  step visible, and forgetting it yields 403s on a URL that *looks* open.
+- **Terraform owns the skeleton, CI owns the code — `ignore_changes` is the treaty.**
+  From Phase 2 the deploy workflow updates the function image out-of-band
+  (`lambda:UpdateFunctionCode` after the quality gate). Without
+  `lifecycle { ignore_changes = [image_uri] }`, every later `terraform apply` would
+  quietly roll the API back to the bootstrap image. This split — infra declarative,
+  release imperative — is the standard pattern for "Terraform + CD both touch Lambda".
+- **Pre-create the log group or pay forever.** If Lambda auto-creates
+  `/aws/lambda/<name>`, retention is *never expire*. Declaring the
+  `aws_cloudwatch_log_group` with `retention_in_days` before the function exists is
+  the only clean way to cap it (plus it gets destroyed with the stack instead of
+  lingering).
+- **Memory is Lambda's only CPU dial.** vCPU scales linearly with memory (1 full vCPU
+  at 1769 MB) — 1024 MB is bought not for RAM (the model is 1.6 MB) but so uvicorn
+  boot + ONNX session init don't crawl through a cold start on ~0.29 vCPU.
+- **Buildx's default attestations can make an image Lambda won't run.** Modern
+  `docker build` attaches provenance attestations, turning the pushed artifact into an
+  OCI image *index* (visible as "exporting attestation manifest" in the build log) —
+  and Lambda only accepts single-platform image manifests. `--provenance=false` at
+  build time keeps the artifact a plain manifest. Ordering also matters: the image
+  must exist in ECR before the first apply, because Lambda validates `image_uri` at
+  function creation.
+
 ## 2026-07-06 — Serving day: one HTTP image that Lambda can also run
 
 - **Lambda Web Adapter is an extension, not a framework.** The whole "one image for
