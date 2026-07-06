@@ -4,6 +4,40 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-06 — Serving day: one HTTP image that Lambda can also run
+
+- **Lambda Web Adapter is an extension, not a framework.** The whole "one image for
+  Lambda and EKS" trick is a single `COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter`
+  line dropping a binary into `/opt/extensions/`. On Lambda, that extension registers
+  with the runtime API, polls `AWS_LWA_READINESS_CHECK_PATH` (our `/healthz`) until the
+  web server is up, then forwards each invocation as a plain HTTP request to `PORT`.
+  Anywhere else the extension simply never runs — `docker run` gives an ordinary
+  uvicorn server. No Mangum, no handler shim, zero Lambda-specific code in the app.
+- **The venv is the deployable unit in a uv multi-stage build.** Builder stage: copy
+  `/uv` from Astral's image (pinned), `uv sync --locked --no-default-groups` — the
+  task-2 dependency-group split pays off here: runtime deps only, no torch, no pytest.
+  Runtime stage: copy `/app/.venv` and put it on `PATH`. Both stages share the same
+  `python:3.12-slim-bookworm` base so the venv's interpreter symlink resolves. Deps
+  install before source COPY, so code edits rebuild in seconds. Image: 441 MB vs
+  multi-GB with torch inside.
+- **The model file is the API's config.** The app reads the class list, val_accuracy,
+  and even the graph's input/output names from `model.onnx` itself (metadata +
+  `session.get_inputs()`), and `/model-info` serves the file's sha256. No params.yaml
+  in the image, no constants imported from training code (that would drag torch in — a
+  subprocess test pins `import quickdraw.serving.app` torch-free), and any deployed
+  container can prove exactly which artifact it is running.
+- **Load the model in the lifespan, map domain errors to 400s.** Loading in FastAPI's
+  lifespan (not at import) means a broken model fails startup — before Lambda's
+  readiness check ever passes — instead of surprising the first request. And the
+  shared preprocess module's `ValueError`s ("empty drawing", bad strokes) are client
+  errors: catch and return 400 with the message, or FastAPI 500s on them. One subtlety:
+  `binascii.Error` (bad base64) already *is* a `ValueError`, and PIL raises `OSError`
+  for undecodable images — the except clause needs both.
+- **Ports below 1024 are privileged; 8080 is not.** The container binds 8080 — the Web
+  Adapter's default — which needs no root and no capabilities, keeping a future
+  non-root container user cheap. Nothing in the Lambda path cares about port 80: the
+  Function URL fronts whatever port the adapter forwards to.
+
 ## 2026-07-04 — First training run: 0.915, and two artifact gotchas
 
 - **`mlflow ui` doesn't find sqlite-backed runs on its own.** MLflow separates the

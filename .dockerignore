@@ -1,0 +1,13 @@
+# The Dockerfile COPYs only pyproject.toml, uv.lock, README.md, src/, and
+# models/model.onnx — this file keeps the heavy rest (data/ is ~1.7 GB) out of the
+# build context so `docker build` doesn't spend minutes uploading it to the daemon.
+.git
+.venv
+data/
+mlruns/
+mlflow.db
+reports/
+models/*
+!models/model.onnx
+infra/
+**/__pycache__
