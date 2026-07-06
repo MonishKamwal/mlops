@@ -4,6 +4,8 @@
   *all* preprocessing down to the 28x28 model input happens here, through
   :mod:`quickdraw.data.preprocess` — the exact module the training pipeline uses.
   That shared code path is the project's no-train/serve-skew rule made concrete.
+  With ``PREDICTION_LOG_BUCKET`` set, every prediction also writes one JSONL record
+  to S3 (:mod:`quickdraw.serving.prediction_log` — digest, top-3, latency; no PII).
 - ``GET /healthz`` — readiness: the Lambda Web Adapter polls it before forwarding
   traffic; EKS probes reuse it in Phase 3.
 - ``GET /model-info`` — which model is loaded (classes, val_accuracy, sha256).
@@ -20,7 +22,9 @@ and doubled CORS headers break browsers. Revisit for local frontend dev in task 
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
+import time
 from contextlib import asynccontextmanager
 from importlib.metadata import version
 from pathlib import Path
@@ -31,6 +35,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 from quickdraw.data.preprocess import png_to_model_input, strokes_to_model_input
+from quickdraw.serving.prediction_log import PredictionLog, prediction_log_from_env
 from quickdraw.serving.predictor import Predictor
 
 DEFAULT_MODEL_PATH = "models/model.onnx"
@@ -66,18 +71,24 @@ class ModelInfo(BaseModel):
     service_version: str
 
 
-def create_app(model_path: Path | None = None) -> FastAPI:
+def create_app(
+    model_path: Path | None = None, prediction_log: PredictionLog | None = None
+) -> FastAPI:
     """Build the app around one model file (env ``MODEL_PATH`` unless overridden).
 
     The model loads in the lifespan, not at import: importing the module is always
     safe, and a missing/corrupt model fails the server at startup — loudly, before
     the readiness check ever passes — instead of on the first request.
+
+    ``prediction_log`` is injectable for tests; by default it comes from the
+    environment (``PREDICTION_LOG_BUCKET`` set -> log to S3, unset -> disabled).
     """
     path = Path(model_path or os.environ.get("MODEL_PATH", DEFAULT_MODEL_PATH))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.predictor = Predictor(path)
+        app.state.prediction_log = prediction_log or prediction_log_from_env()
         yield
 
     app = FastAPI(title="QuickDraw sketch classifier", lifespan=lifespan)
@@ -103,6 +114,7 @@ def create_app(model_path: Path | None = None) -> FastAPI:
     def predict(request: PredictRequest) -> PredictResponse:
         if request.strokes is None and request.png_base64 is None:
             raise HTTPException(status_code=400, detail="provide strokes and/or png_base64")
+        start = time.perf_counter()
         try:
             if request.strokes is not None:
                 source: Literal["strokes", "png"] = "strokes"
@@ -118,6 +130,21 @@ def create_app(model_path: Path | None = None) -> FastAPI:
 
         predictor: Predictor = app.state.predictor
         ranked = predictor.predict(model_input)
+        latency_ms = (time.perf_counter() - start) * 1000
+
+        log: PredictionLog | None = app.state.prediction_log
+        if log is not None:
+            # digest of the canonical (1, 28, 28) float32 input, not the request
+            # JSON: identical drawings hash identically however they were encoded
+            log.log(
+                input_sha256=hashlib.sha256(model_input.tobytes()).hexdigest(),
+                source=source,
+                ranked=ranked,
+                latency_ms=latency_ms,
+                model_sha256=predictor.model_sha256,
+                service_version=version("quickdraw"),
+            )
+
         return PredictResponse(
             predictions=[Prediction(label=label, probability=p) for label, p in ranked],
             source=source,
