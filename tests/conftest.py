@@ -7,10 +7,24 @@ dynamo exporter takes a few seconds and every serving test can share one file.
 """
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 SERVING_TEST_CLASSES = ["airplane", "apple", "banana", "bicycle", "bird", "car", "cat"]
+
+
+class FakeS3Client:
+    """Stands in for boto3's S3 client in prediction-log tests (PutObjectClient shape)."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.puts: list[dict[str, Any]] = []
+
+    def put_object(self, **kwargs: Any) -> Any:
+        if self.fail:
+            raise RuntimeError("s3 is down")
+        self.puts.append(kwargs)
 
 
 @pytest.fixture(scope="session")

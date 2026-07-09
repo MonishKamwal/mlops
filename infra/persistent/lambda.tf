@@ -20,13 +20,30 @@ data "aws_iam_policy_document" "lambda_trust" {
 
 resource "aws_iam_role" "api_exec" {
   name               = "quickdraw-api-exec"
-  description        = "Execution role for the serving Lambda: CloudWatch logs only (S3 prediction logging lands in task 6)."
+  description        = "Execution role for the serving Lambda: CloudWatch logs + prediction-log writes to S3."
   assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
 }
 
 resource "aws_iam_role_policy_attachment" "api_exec_logs" {
   role       = aws_iam_role.api_exec.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Prediction logging (task 6) is append-only by construction: PutObject on the
+# predictions/ prefix and nothing else — the API can't read, list, or delete
+# what it wrote, and can't touch anything else in the bucket.
+data "aws_iam_policy_document" "api_prediction_logs" {
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.logs.arn}/predictions/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "api_prediction_logs" {
+  name   = "prediction-logs-put"
+  role   = aws_iam_role.api_exec.id
+  policy = data.aws_iam_policy_document.api_prediction_logs.json
 }
 
 # Created ahead of the function: if Lambda auto-creates this group, its logs
@@ -53,8 +70,15 @@ resource "aws_lambda_function" "api" {
   memory_size = 1024
   timeout     = 30
 
-  # No environment block: MODEL_PATH, PORT, and the adapter's readiness path are
-  # baked into the image — the same defaults serve docker run, Lambda, and EKS.
+  # Image defaults still rule for anything the image can know (MODEL_PATH, PORT,
+  # readiness path). PREDICTION_LOG_BUCKET is different: only infra knows the
+  # bucket's name, and its *presence* switches logging on — docker run and tests
+  # stay AWS-free by simply not setting it.
+  environment {
+    variables = {
+      PREDICTION_LOG_BUCKET = aws_s3_bucket.logs.bucket
+    }
+  }
 
   # Phase 2 CI deploys by lambda:UpdateFunctionCode after its quality gate, so
   # the tag recorded here is only the bootstrap image; without this, every apply

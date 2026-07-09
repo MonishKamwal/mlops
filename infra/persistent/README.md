@@ -32,6 +32,10 @@ serving image must be in ECR before the apply that first creates
 `aws_lambda_function.api`. Phase 1 does this push manually (arm64 build →
 `docker push <ecr_repository_url>:latest`); Phase 2 CI takes over, updating
 the function code out-of-band — Terraform ignores `image_uri` drift by design.
+Until then, app-code changes need a manual redeploy after the push: pushing a
+new `:latest` does **not** update the function (Lambda pinned the image digest
+at creation) — use the Lambda Console's "Deploy new image" or
+`aws lambda update-function-code`.
 
 ## Deliberately absent (for now)
 
