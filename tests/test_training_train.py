@@ -14,6 +14,7 @@ import pytest
 
 from quickdraw.config import TrainingParams
 from quickdraw.training.model import load_checkpoint
+from quickdraw.training.registry import CHALLENGER, CHAMPION, MODEL_NAME
 from quickdraw.training.train import MLFLOW_EXPERIMENT, train_model
 
 NUM_CLASSES = 3
@@ -70,3 +71,10 @@ def test_train_model_end_to_end(data_path: Path, tmp_path: Path) -> None:
     run = runs[0]
     assert run.data.metrics["best_val_accuracy"] == pytest.approx(checkpoint["val_accuracy"])
     assert run.data.params["epochs"] == "4"
+
+    # Training registers its checkpoint: version 1 is both challenger and champion
+    # (the bootstrap case — there is nothing to compare against yet).
+    challenger = client.get_model_version_by_alias(MODEL_NAME, CHALLENGER)
+    champion = client.get_model_version_by_alias(MODEL_NAME, CHAMPION)
+    assert str(challenger.version) == str(champion.version) == "1"
+    assert challenger.run_id == run.info.run_id

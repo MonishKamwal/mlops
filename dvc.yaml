@@ -53,6 +53,7 @@ stages:
       - reports/data_validation.json
       - src/quickdraw/config.py
       - src/quickdraw/training/model.py
+      - src/quickdraw/training/registry.py
       - src/quickdraw/training/train.py
     params:
       - training
@@ -66,6 +67,7 @@ stages:
       - models/model.pt
       - src/quickdraw/training/evaluate.py
       - src/quickdraw/training/model.py
+      - src/quickdraw/training/registry.py
     metrics:
       # cache: false → the (tiny) metrics file lives in git, so
       # `dvc metrics diff` works across commits and PRs show metric changes.

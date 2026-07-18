@@ -100,10 +100,14 @@ stages:
       hash: md5
       md5: 7d1ba7ebcc1b3355dc89b079b28f403c
       size: 2964
+    - path: src/quickdraw/training/registry.py
+      hash: md5
+      md5: 51241cb4f5eeabbf47ba62d65a9b7925
+      size: 4563
     - path: src/quickdraw/training/train.py
       hash: md5
-      md5: e053d23fcd64e63c3ab978609e43ca86
-      size: 6844
+      md5: 17f6ecb0dcd67963af7ddbd3fc4f1756
+      size: 7017
     params:
       params.yaml:
         training:
@@ -131,12 +135,16 @@ stages:
       size: 1692401
     - path: src/quickdraw/training/evaluate.py
       hash: md5
-      md5: e0c28e700a9d50004ce363352b67e5e5
-      size: 5673
+      md5: 46334971749f2a799d90d0d307f2b026
+      size: 5971
     - path: src/quickdraw/training/model.py
       hash: md5
       md5: 7d1ba7ebcc1b3355dc89b079b28f403c
       size: 2964
+    - path: src/quickdraw/training/registry.py
+      hash: md5
+      md5: 51241cb4f5eeabbf47ba62d65a9b7925
+      size: 4563
     outs:
     - path: reports/eval/confusion_matrix.png
       hash: md5

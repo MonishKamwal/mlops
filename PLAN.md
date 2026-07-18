@@ -254,6 +254,14 @@ that can say no. Evidence hub goes live.
 3. **MLflow on S3:** CI pulls `mlflow.db` + artifact store from S3, runs tracked training,
    pushes back (single-writer: workflow `concurrency` group). Registry with aliases
    `champion` / `challenger`.
+
+   > **Amended 2026-07-18:** only `mlflow.db` syncs (`scripts/mlflow_sync.sh pull|push`);
+   > artifacts write to S3 *natively* — MLflow records artifact roots as absolute URIs, so a
+   > synced `mlruns/` would bake laptop paths into the shared DB and break on any other
+   > machine, while `s3://` roots are portable by construction. `MLFLOW_STATE_BUCKET` unset →
+   > fully local and AWS-free (same env-presence switch as `PREDICTION_LOG_BUCKET`). The
+   > laptop-era `mlflow.db` is archived, not shared: its experiment carries a local artifact
+   > root — shared history starts the day tracking became shared infrastructure.
 4. **Quality gate (`gate.py`):** challenger must beat champion's test accuracy − ε (ε=0.5pp) AND
    exceed absolute floor (85%). Pass → promote alias, proceed; fail → workflow fails with a
    metric-diff summary in the job annotation.
