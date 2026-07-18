@@ -32,10 +32,25 @@ stages:
     outs:
       - data/processed/quickdraw.npz
 
+  validate:
+    cmd: python -m quickdraw.data.validate
+    deps:
+      - data/processed/quickdraw.npz
+      - src/quickdraw/config.py
+      - src/quickdraw/data/validate.py
+    params:
+      - data
+    outs:
+      # Timestamp-free by design: a DVC out must be deterministic to be
+      # cache-stable. Train depends on this file — that dependency edge is what
+      # makes validation a *gate* (no report, no training), not a sibling stage.
+      - reports/data_validation.json
+
   train:
     cmd: python -m quickdraw.training.train
     deps:
       - data/processed/quickdraw.npz
+      - reports/data_validation.json
       - src/quickdraw/config.py
       - src/quickdraw/training/model.py
       - src/quickdraw/training/train.py

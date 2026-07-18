@@ -32,6 +32,8 @@ train = [
     "mlflow>=2.18",
     "onnx>=1.17",
     "onnxscript>=0.2",  # required by torch>=2.9's default (dynamo) ONNX exporter
+    "pandas>=2.2",
+    "pandera>=0.26",
     "torch>=2.6",
 ]
 

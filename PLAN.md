@@ -124,7 +124,7 @@ mlops/
 │   └── monitoring/             # drift_report.py, mlflow_static_export.py
 ├── tests/                      # unit tests incl. preprocessing-parity tests
 ├── data/                       # DVC-managed (raw/, processed/) — pointers only in git
-├── dvc.yaml                    # stages: download → validate → preprocess → train → evaluate → export
+├── dvc.yaml                    # stages: download → preprocess → validate → train → evaluate → export
 ├── params.yaml                 # classes, samples/class, epochs, lr, gate thresholds
 ├── Dockerfile                  # FastAPI + onnxruntime + Lambda Web Adapter (one image, both tiers)
 ├── deploy/helm/quickdraw-api/  # chart: deployment, service, HPA, ServiceMonitor; values toggle for LB
@@ -240,11 +240,17 @@ lifecycle policy).
 that can say no. Evidence hub goes live.
 
 **Tasks:**
-1. **DVC:** init with S3 remote; `dvc.yaml` stages `download → validate → preprocess → train →
+1. **DVC:** init with S3 remote; `dvc.yaml` stages `download → preprocess → validate → train →
    evaluate → export`; `params.yaml` for classes/hyperparams/gate thresholds. `dvc repro` is now
    *the* way to run the pipeline (locally and in CI).
 2. **Validation stage:** Pandera schemas over dataset metadata (per-class counts, pixel value
    ranges, label set, split sizes) — pipeline fails loudly on bad data.
+
+   > **Amended 2026-07-18:** the stage validates the *processed* artifact, so it sits between
+   > preprocess and train (originally sketched before preprocess). Every check above describes
+   > the npz, malformed raw data already crashes preprocess loudly, and training is the
+   > expensive silent consumer — the gate belongs at its door, enforced as a DVC dependency
+   > edge (train depends on the validation report).
 3. **MLflow on S3:** CI pulls `mlflow.db` + artifact store from S3, runs tracked training,
    pushes back (single-writer: workflow `concurrency` group). Registry with aliases
    `champion` / `challenger`.

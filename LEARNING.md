@@ -4,6 +4,35 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-18 — Data validation: a schema is a contract, a dep edge is a gate
+
+- **Pandera validates dataframes, so give it a dataframe worth validating.** The
+  npz is tensors, not tables — the stage reduces it to one metadata row per
+  (split, class): count, pixel min/max, mean ink fraction. The schema then *is*
+  the documentation of what healthy data looks like: exact split sizes, every
+  class in every split, label→class order matching params.yaml, true-black
+  background, near-white ink present, ink fraction away from blank and solid.
+  Tensor-level facts a dataframe can't carry (dtypes, shapes, the artifact's
+  embedded class list) are plain ValueErrors checked first.
+- **A validation stage only gates what depends on it.** DVC has no "run this
+  before that" ordering — only data edges. Making train depend on the
+  validation *report file* is what turns validation from a sibling stage into a
+  gate: the stage fails → no report → train cannot run. Structure, not
+  discipline.
+- **DVC outs must be deterministic — no timestamps in reports.** The report is
+  hashed like any artifact; a timestamp would make every run look changed and
+  poison the cache. (A test asserts byte-identical output across runs.)
+- **The plan moved, and that's the plan working.** PLAN.md sketched validate
+  before preprocess, but every prescribed check describes the *processed*
+  artifact, and malformed raw data already crashes preprocess loudly. The gate
+  belongs at the door of the expensive silent consumer: training. PLAN.md
+  amended, reasoning recorded.
+- **Same-machine seeded training is byte-deterministic — and DVC noticed.**
+  Rewiring train's deps forced it to re-run; it produced a bit-identical
+  model.pt, so DVC skipped evaluate and export outright: the cascade stops at
+  the first unchanged artifact, like ccache for ML. (Identical loss curves to
+  four decimals were the tell; the skipped stages were the proof.)
+
 ## 2026-07-18 — DVC day: make-for-data, and the cache is the point
 
 - **DVC is `make` for data, and `dvc.lock` is the receipt.** Each stage declares
