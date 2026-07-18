@@ -1,0 +1,164 @@
+schema: '2.0'
+stages:
+  download:
+    cmd: python -m quickdraw.data.download
+    deps:
+    - path: src/quickdraw/config.py
+      hash: md5
+      md5: 651cefb97e810b381d68ec016098ad84
+      size: 3078
+    - path: src/quickdraw/data/download.py
+      hash: md5
+      md5: 9c06952fe132ec4dbcd78678146f683c
+      size: 2960
+    params:
+      params.yaml:
+        data.classes:
+        - airplane
+        - apple
+        - banana
+        - bicycle
+        - bird
+        - car
+        - cat
+        - clock
+        - dog
+        - face
+        - fish
+        - house
+        - star
+        - tree
+        - umbrella
+    outs:
+    - path: data/raw
+      hash: md5
+      md5: ee1600c0c2dd8b6924048ce028723d0a.dir
+      size: 1788070784
+      nfiles: 15
+  preprocess:
+    cmd: python -m quickdraw.data.preprocess
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: ee1600c0c2dd8b6924048ce028723d0a.dir
+      size: 1788070784
+      nfiles: 15
+    - path: src/quickdraw/config.py
+      hash: md5
+      md5: 651cefb97e810b381d68ec016098ad84
+      size: 3078
+    - path: src/quickdraw/data/preprocess.py
+      hash: md5
+      md5: 3103b612192a22cfaaa23611d3942570
+      size: 11660
+    params:
+      params.yaml:
+        data:
+          classes:
+          - airplane
+          - apple
+          - banana
+          - bicycle
+          - bird
+          - car
+          - cat
+          - clock
+          - dog
+          - face
+          - fish
+          - house
+          - star
+          - tree
+          - umbrella
+          samples_per_class: 10000
+          seed: 42
+          splits:
+            train: 0.8
+            val: 0.1
+            test: 0.1
+    outs:
+    - path: data/processed/quickdraw.npz
+      hash: md5
+      md5: ab3b27daa743297978cd3bc40d193198
+      size: 41088939
+  train:
+    cmd: python -m quickdraw.training.train
+    deps:
+    - path: data/processed/quickdraw.npz
+      hash: md5
+      md5: ab3b27daa743297978cd3bc40d193198
+      size: 41088939
+    - path: src/quickdraw/config.py
+      hash: md5
+      md5: 651cefb97e810b381d68ec016098ad84
+      size: 3078
+    - path: src/quickdraw/training/model.py
+      hash: md5
+      md5: 7d1ba7ebcc1b3355dc89b079b28f403c
+      size: 2964
+    - path: src/quickdraw/training/train.py
+      hash: md5
+      md5: e053d23fcd64e63c3ab978609e43ca86
+      size: 6844
+    params:
+      params.yaml:
+        training:
+          epochs: 8
+          batch_size: 256
+          learning_rate: 0.001
+          weight_decay: 0.0001
+          dropout: 0.3
+          seed: 42
+    outs:
+    - path: models/model.pt
+      hash: md5
+      md5: 42da9cd1468303ffbdefaf7c81825ddd
+      size: 1692401
+  evaluate:
+    cmd: python -m quickdraw.training.evaluate
+    deps:
+    - path: data/processed/quickdraw.npz
+      hash: md5
+      md5: ab3b27daa743297978cd3bc40d193198
+      size: 41088939
+    - path: models/model.pt
+      hash: md5
+      md5: 42da9cd1468303ffbdefaf7c81825ddd
+      size: 1692401
+    - path: src/quickdraw/training/evaluate.py
+      hash: md5
+      md5: e0c28e700a9d50004ce363352b67e5e5
+      size: 5673
+    - path: src/quickdraw/training/model.py
+      hash: md5
+      md5: 7d1ba7ebcc1b3355dc89b079b28f403c
+      size: 2964
+    outs:
+    - path: reports/eval/confusion_matrix.png
+      hash: md5
+      md5: 849512b7f7f6d3bf40e4bd815445d2b3
+      size: 105267
+    - path: reports/eval/metrics.json
+      hash: md5
+      md5: ea34bdfb1376278eddecaa7d3fd4e28a
+      size: 1823
+  export:
+    cmd: python -m quickdraw.training.export_onnx
+    deps:
+    - path: models/model.pt
+      hash: md5
+      md5: 42da9cd1468303ffbdefaf7c81825ddd
+      size: 1692401
+    - path: src/quickdraw/training/export_onnx.py
+      hash: md5
+      md5: d68d3141f07c8735d92cbebbcd71008d
+      size: 4114
+    - path: src/quickdraw/training/model.py
+      hash: md5
+      md5: 7d1ba7ebcc1b3355dc89b079b28f403c
+      size: 2964
+    outs:
+    - path: models/model.onnx
+      hash: md5
+      md5: d494001002ab0ac3eb7e25581a87af54
+      size: 1707279

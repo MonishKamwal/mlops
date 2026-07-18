@@ -1,0 +1,97 @@
+{
+  "test_accuracy": 0.9157333333333333,
+  "macro_f1": 0.9162248091757045,
+  "per_class": {
+    "airplane": {
+      "precision": 0.8873,
+      "recall": 0.89,
+      "f1": 0.8887,
+      "support": 1000
+    },
+    "apple": {
+      "precision": 0.9766,
+      "recall": 0.961,
+      "f1": 0.9688,
+      "support": 1000
+    },
+    "banana": {
+      "precision": 0.94,
+      "recall": 0.94,
+      "f1": 0.94,
+      "support": 1000
+    },
+    "bicycle": {
+      "precision": 0.9489,
+      "recall": 0.966,
+      "f1": 0.9574,
+      "support": 1000
+    },
+    "bird": {
+      "precision": 0.8015,
+      "recall": 0.771,
+      "f1": 0.7859,
+      "support": 1000
+    },
+    "car": {
+      "precision": 0.9623,
+      "recall": 0.919,
+      "f1": 0.9402,
+      "support": 1000
+    },
+    "cat": {
+      "precision": 0.8708,
+      "recall": 0.802,
+      "f1": 0.835,
+      "support": 1000
+    },
+    "clock": {
+      "precision": 0.9548,
+      "recall": 0.971,
+      "f1": 0.9628,
+      "support": 1000
+    },
+    "dog": {
+      "precision": 0.7138,
+      "recall": 0.833,
+      "f1": 0.7688,
+      "support": 1000
+    },
+    "face": {
+      "precision": 0.9526,
+      "recall": 0.924,
+      "f1": 0.9381,
+      "support": 1000
+    },
+    "fish": {
+      "precision": 0.9305,
+      "recall": 0.95,
+      "f1": 0.9401,
+      "support": 1000
+    },
+    "house": {
+      "precision": 0.9888,
+      "recall": 0.969,
+      "f1": 0.9788,
+      "support": 1000
+    },
+    "star": {
+      "precision": 0.9468,
+      "recall": 0.925,
+      "f1": 0.9358,
+      "support": 1000
+    },
+    "tree": {
+      "precision": 0.9384,
+      "recall": 0.959,
+      "f1": 0.9486,
+      "support": 1000
+    },
+    "umbrella": {
+      "precision": 0.9531,
+      "recall": 0.956,
+      "f1": 0.9546,
+      "support": 1000
+    }
+  },
+  "val_accuracy": 0.9151
+}

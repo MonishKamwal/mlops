@@ -1,0 +1,69 @@
+# The pipeline DAG — `uv run dvc repro` is THE way to run it (PLAN.md Phase 2).
+#
+# Each stage hashes its deps (code files + params.yaml sections) and outs; repro
+# re-runs only what changed, and dvc.lock pins the exact artifact hashes in git.
+#
+# Deliberate non-outs: train's MLflow side effects (mlflow.db, mlruns/) belong to
+# the experiment tracker, not the pipeline — task 3 moves them to S3. DVC owns
+# the *artifacts*; MLflow owns the *history*.
+stages:
+  download:
+    cmd: python -m quickdraw.data.download
+    deps:
+      - src/quickdraw/config.py
+      - src/quickdraw/data/download.py
+    params:
+      - data.classes
+    outs:
+      # Cached for repro integrity, but never pushed: Google's public GCS bucket
+      # is the canonical source and the stage re-fetches deterministically —
+      # our S3 remote stores derived artifacts only.
+      - data/raw:
+          push: false
+
+  preprocess:
+    cmd: python -m quickdraw.data.preprocess
+    deps:
+      - data/raw
+      - src/quickdraw/config.py
+      - src/quickdraw/data/preprocess.py
+    params:
+      - data
+    outs:
+      - data/processed/quickdraw.npz
+
+  train:
+    cmd: python -m quickdraw.training.train
+    deps:
+      - data/processed/quickdraw.npz
+      - src/quickdraw/config.py
+      - src/quickdraw/training/model.py
+      - src/quickdraw/training/train.py
+    params:
+      - training
+    outs:
+      - models/model.pt
+
+  evaluate:
+    cmd: python -m quickdraw.training.evaluate
+    deps:
+      - data/processed/quickdraw.npz
+      - models/model.pt
+      - src/quickdraw/training/evaluate.py
+      - src/quickdraw/training/model.py
+    metrics:
+      # cache: false → the (tiny) metrics file lives in git, so
+      # `dvc metrics diff` works across commits and PRs show metric changes.
+      - reports/eval/metrics.json:
+          cache: false
+    outs:
+      - reports/eval/confusion_matrix.png
+
+  export:
+    cmd: python -m quickdraw.training.export_onnx
+    deps:
+      - models/model.pt
+      - src/quickdraw/training/export_onnx.py
+      - src/quickdraw/training/model.py
+    outs:
+      - models/model.onnx

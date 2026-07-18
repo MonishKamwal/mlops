@@ -4,6 +4,39 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-18 — DVC day: make-for-data, and the cache is the point
+
+- **DVC is `make` for data, and `dvc.lock` is the receipt.** Each stage declares
+  cmd + deps (code files, params.yaml *sections*) + outs; repro re-runs only what
+  changed. The lock file records every dep/out hash and lives in git — so a git
+  commit now pins code, params, *and the exact bytes of every artifact*, while git
+  itself stores only hashes. Param-scoped deps pay off immediately: download
+  depends on `data.classes` alone, so tuning `samples_per_class` re-runs
+  preprocess but not the 1.7 GB download.
+- **DVC deletes a stage's outs before running it.** First repro re-downloaded all
+  of `data/raw` even though the files sat right there — our script's skip-existing
+  logic never got a chance. That's the contract, not a bug: a surviving output is
+  unverifiable (is it produced, or stale?), so a stage must create its outs from
+  nothing every time *it runs*. The toll is paid once; afterwards the stage
+  doesn't run at all — outputs come back from cache.
+- **The cache is content-addressed; the remote is just cache sync.**
+  `.dvc/cache/files/md5/ab/cdef…` stores each unique blob once; workspace files
+  are reflinks on APFS (no double disk). `dvc push` mirrors that layout into
+  `s3://…/dvc/` — and per-out flags decide what belongs there: raw is
+  `push: false` (Google's bucket is canonical; storing a second 1.7 GB copy buys
+  nothing), `metrics.json` is `cache: false` (tiny, git-tracked, enables
+  `dvc metrics diff` across commits). Not every artifact belongs in the remote —
+  that's a per-out decision, not a global one.
+- **Seeded training reproduced to four decimals, two weeks later.** Same params,
+  re-downloaded data, fresh run: val 0.9151 / test 0.9157 / macro F1 0.9162 —
+  identical to 2026-07-04, down to per-class F1s. Bit-identical weights are not
+  promised across machines, but metric-identical on the same machine is what
+  seeded determinism buys — and it turns "reproducible pipeline" from a claim
+  into a diff.
+- **Idempotency proof, again.** Same DoD instinct as Terraform: the second
+  `dvc repro` printing five `didn't change, skipping` lines is the evidence the
+  DAG describes a fixed point, not a script that happens to run.
+
 ## 2026-07-18 — Shipping day: mutable tags, pinned digests, safe intermediate states
 
 - **Pushing `:latest` deploys nothing.** Lambda resolves the tag to an image *digest*
