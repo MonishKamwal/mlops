@@ -1,0 +1,6 @@
+[core]
+    remote = storage
+    analytics = false
+['remote "storage"']
+    url = s3://mlops-quickdraw-data-ab1b/dvc
+    region = us-east-2

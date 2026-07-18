@@ -226,9 +226,15 @@ mlruns/
 # Dataset files (DVC-managed from Phase 2; pointers only in git)
 /data/
 
-# Model artifacts + evaluation reports (DVC-managed from Phase 2)
+# Model artifacts + evaluation reports (DVC-managed from Phase 2).
+# metrics.json is deliberately git-tracked (dvc.yaml marks it cache: false) so
+# `dvc metrics diff` works across commits — git can't un-ignore a file inside an
+# ignored directory, so each level down to it is opened up explicitly.
 /models/
-/reports/
+/reports/*
+!/reports/eval/
+/reports/eval/*
+!/reports/eval/metrics.json
 
 # Terraform
 .terraform/

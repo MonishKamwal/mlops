@@ -27,6 +27,7 @@ dev = [
 # Training-only stack, kept out of [project.dependencies] so the serving image
 # installs the runtime deps without torch/MLflow (Dockerfile: --no-default-groups).
 train = [
+    "dvc[s3]>=3.55",
     "matplotlib>=3.9",
     "mlflow>=2.18",
     "onnx>=1.17",

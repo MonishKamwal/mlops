@@ -57,6 +57,21 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-18 (personal laptop, later)** — **Phase 2 task 1 (DVC) built and verified**
+  (branch `phase2-dvc`): `dvc[s3]` added to the `train` group (stays out of the
+  serving image); `dvc init`, remote `storage` = `s3://mlops-quickdraw-data-ab1b/dvc`
+  (us-east-2, analytics off); `dvc.yaml` with 5 stages (download → preprocess →
+  train → evaluate → export — `validate` arrives with task 2/Pandera), param-scoped
+  deps (`data.classes` for download, `data` / `training` sections), fine-grained
+  code deps. Design: raw is cached but `push: false` (Google GCS is canonical;
+  S3 stores derived artifacts only ~42 MB); `metrics.json` is `cache: false` →
+  git-tracked for `dvc metrics diff` (.gitignore negation dance); MLflow state
+  deliberately NOT a DVC out (task 3's job). Full `dvc repro` ran: **val_accuracy
+  0.9151 / test 0.9157 / macro F1 0.9162 — identical to the 07-04 run to 4
+  decimals** (seeded reproducibility demonstrated); parity 1.9e-06; second repro =
+  all-skip no-op. Learned: DVC deletes a stage's outs before running it, so the
+  first repro re-downloaded all 1.7 GB (one-time; cache serves it now). 5 new
+  pipeline-definition tests (78 total).
 - **2026-07-18 (personal laptop)** — **Task 6 shipped → Phase 1 complete.** Ran the
   ship runbook end to end: PR #7 was already merged; `terraform apply` (1 add /
   2 change — inline `prediction-logs-put` policy, `PREDICTION_LOG_BUCKET` env var,
@@ -223,20 +238,26 @@ objects visibly accumulating from real drawings on the public site.
 serving → Lambda deploy → public canvas → prediction logging. Real visitor data has
 started accruing for Phase 4.
 
+**Phase 2 task 1 (DVC) is built and verified locally** (branch `phase2-dvc`):
+5-stage `dvc.yaml` (no `validate` yet — that's task 2), S3 remote on the data
+bucket, `dvc repro` reproduced the 07-04 training metrics exactly, second repro =
+no-op, 78 tests green. `dvc repro` is now *the* way to run the pipeline.
+
 ## Immediate next step (rolling — keep this precise)
 
-Start **Phase 2 — automation** (PLAN.md §5 Phase 2): no manual steps between "merge
-to main" and "new model live", with a quality gate that can say no.
+Finish task 1, then continue **Phase 2 — automation** (PLAN.md §5 Phase 2):
 
-1. **Task 1 (DVC):** `dvc init` with S3 remote (data bucket), `dvc.yaml` stages
-   `download → validate → preprocess → train → evaluate → export`; `dvc repro`
-   becomes *the* way to run the pipeline. (Validation stage can be a stub until
-   task 2 fills it with Pandera.)
-2. Then in order: task 2 (Pandera validation), task 3 (MLflow db + artifacts on S3,
-   single-writer concurrency), task 4 (`gate.py` champion/challenger), task 5 (CI
-   workflows — `train-deploy.yml` is the first real exercise of the untested OIDC
-   assume-role path), task 6 (evidence hub Pages), task 7 (model card).
-3. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`
+1. Task 1 close-out: `dvc push` (Monish — ~42 MB of derived artifacts), commit
+   (dvc.yaml, dvc.lock, .dvc/, metrics.json, tests, this file), PR `phase2-dvc` →
+   main.
+2. **Task 2 (Pandera):** `validate` stage between download and preprocess —
+   schemas over dataset metadata (per-class counts, pixel value ranges, label set,
+   split sizes); pipeline fails loudly on bad data.
+3. Then in order: task 3 (MLflow db + artifacts on S3, single-writer concurrency),
+   task 4 (`gate.py` champion/challenger), task 5 (CI workflows —
+   `train-deploy.yml` is the first real exercise of the untested OIDC assume-role
+   path), task 6 (evidence hub Pages), task 7 (model card).
+4. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`
    check) via GitHub UI once required checks are worth enforcing.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
