@@ -219,8 +219,9 @@ __marimo__/
 
 # --- project-specific ---
 
-# MLflow local state (synced to S3 by CI, never committed)
-mlflow.db
+# MLflow local state (mlflow.db syncs to S3 via scripts/mlflow_sync.sh, never
+# committed; mlflow.local.db is the archived pre-shared-state laptop history)
+mlflow*.db
 mlruns/
 
 # Dataset files (DVC-managed from Phase 2; pointers only in git)

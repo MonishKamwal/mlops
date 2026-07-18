@@ -57,6 +57,23 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-18 (personal laptop, late night)** — **Phase 2 task 3 (MLflow on S3)
+  built and bootstrapped** (branch `phase2-mlflow`): `training/registry.py` —
+  model `quickdraw`, every train run registers its checkpoint as a version +
+  `challenger` alias (first version bootstraps `champion` too); evaluate logs
+  test_accuracy/macro_f1 onto the challenger's run (what the task-4 gate
+  compares). **Only `mlflow.db` syncs to S3** (`scripts/mlflow_sync.sh
+  pull|push`); artifacts write to S3 natively via the experiment artifact root —
+  MLflow records artifact roots as absolute URIs, so a synced `mlruns/` would
+  bake laptop paths into the shared DB (PLAN.md task 3 amended). Env-presence
+  switch `MLFLOW_STATE_BUCKET` (unset → local + AWS-free; autouse test fixture
+  keeps the suite hermetic); `ensure_experiment` refuses local-rooted experiments
+  when the bucket is set. **Laptop-era mlflow.db archived as `mlflow.local.db`**
+  (never shared); fresh canonical DB bootstrapped: tracked repro → run
+  `fc1582c3…` (val 0.9151 / test 0.9157 — model byte-identical again, export
+  skipped), **v1 = champion = challenger**, artifact at
+  `s3://…-data-ab1b/mlflow/artifacts/fc1582c3…/artifacts/model.pt`, DB pushed to
+  `s3://…-data-ab1b/mlflow/mlflow.db`. 6 new tests (91 total).
 - **2026-07-18 (personal laptop, night)** — **Phase 2 task 2 (Pandera validation)
   built and verified** (branch `phase2-validate`): `data/validate.py` reduces the
   npz to a per-(split, class) metadata dataframe (count, pixel min/max, mean ink)
@@ -256,23 +273,30 @@ started accruing for Phase 4.
 git-tracked), repro reproduced training to 4 decimals, second repro = no-op.
 `dvc repro` is now *the* way to run the pipeline.
 
-**Phase 2 task 2 (Pandera validation) is built and verified locally** (branch
-`phase2-validate`): `validate` stage between preprocess and train (PLAN.md
-amended), gating train via a dep edge on the deterministic report; schema checks
-split sizes / label set / label↔class order / pixel+ink sanity; 85 tests green.
+**Phase 2 task 2 (Pandera validation) is merged** (PR #10, 2026-07-18, CI green):
+`validate` stage between preprocess and train (PLAN.md amended), gating train via
+a dep edge on the deterministic report.
+
+**Phase 2 task 3 (MLflow on S3) is built and bootstrapped** (branch
+`phase2-mlflow`): registry semantics live (v1 = champion = challenger, run
+`fc1582c3…` with test metrics), canonical `mlflow.db` + artifacts on S3,
+`scripts/mlflow_sync.sh` for the DB, `MLFLOW_STATE_BUCKET` env switch. The
+laptop-era DB is archived locally as `mlflow.local.db`. 91 tests green.
 
 ## Immediate next step (rolling — keep this precise)
 
-Finish task 2, then continue **Phase 2 — automation** (PLAN.md §5 Phase 2):
+Finish task 3, then continue **Phase 2 — automation** (PLAN.md §5 Phase 2):
 
-1. Task 2 close-out: `dvc push` (Monish — just the validation report; model bytes
-   unchanged), commit, PR `phase2-validate` → main.
-2. **Task 3 (MLflow on S3):** CI pulls `mlflow.db` + artifact store from S3, runs
-   tracked training, pushes back; single-writer via workflow `concurrency` group;
-   registry with `champion` / `challenger` aliases.
-3. Then in order: task 4 (`gate.py` champion/challenger), task 5 (CI workflows —
-   `train-deploy.yml` is the first real exercise of the untested OIDC assume-role
-   path), task 6 (evidence hub Pages), task 7 (model card).
+1. Task 3 close-out: commit + PR `phase2-mlflow` → main.
+2. **Task 4 (quality gate):** `gate.py` — challenger must beat champion's
+   test_accuracy − ε (ε = 0.5pp) AND clear the absolute floor (85%); pass →
+   promote `champion` alias; fail → nonzero exit with a metric-diff summary.
+   Both numbers come from the registry (aliases → runs → metrics — wired in
+   task 3). Add gate thresholds to params.yaml per PLAN.
+3. Then: task 5 (CI workflows — `train-deploy.yml` calls `mlflow_sync.sh
+   pull` → `dvc repro` → gate → build/push → deploy; first real exercise of the
+   untested OIDC path; single-writer `concurrency` group), task 6 (evidence hub
+   Pages), task 7 (model card).
 4. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`
    check) via GitHub UI once required checks are worth enforcing.
 

@@ -24,6 +24,7 @@ import torch
 
 from quickdraw.data.preprocess import bitmap_to_model_input
 from quickdraw.training.model import QuickDrawCNN, load_checkpoint
+from quickdraw.training.registry import DEFAULT_TRACKING_URI, log_test_metrics_to_challenger
 
 matplotlib.use("Agg")  # render to files; no display needed (or available in CI)
 import matplotlib.pyplot as plt  # noqa: E402
@@ -126,12 +127,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--model", type=Path, default=Path("models/model.pt"))
     parser.add_argument("--data", type=Path, default=Path("data/processed/quickdraw.npz"))
     parser.add_argument("--out-dir", type=Path, default=Path("reports/eval"))
+    parser.add_argument("--tracking-uri", default=DEFAULT_TRACKING_URI)
     args = parser.parse_args(argv)
     metrics = evaluate(args.model, args.data, args.out_dir)
     worst = sorted(metrics["per_class"].items(), key=lambda item: item[1]["f1"])[:3]
     print(f"test_accuracy={metrics['test_accuracy']:.4f} macro_f1={metrics['macro_f1']:.4f}")
     print("hardest classes: " + ", ".join(f"{name} (f1={m['f1']})" for name, m in worst))
     print(f"wrote {args.out_dir / 'metrics.json'} and {args.out_dir / 'confusion_matrix.png'}")
+    run_id = log_test_metrics_to_challenger(metrics, args.tracking_uri)
+    print(f"logged test metrics to challenger run {run_id}")
 
 
 if __name__ == "__main__":

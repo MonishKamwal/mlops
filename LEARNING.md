@@ -4,6 +4,32 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-18 — MLflow state goes to S3: sync the DB, never the artifacts
+
+- **MLflow bakes absolute paths into the tracking DB.** Each experiment records
+  its artifact root as an absolute URI — locally that's `file:///Users/...`. Sync
+  that DB to CI and every new run tries to write artifacts into a path that only
+  exists on the laptop. The structural fix: artifacts go to S3 *natively* (the
+  experiment is created with an `s3://` root), because S3 URIs mean the same
+  thing on every machine. The DB becomes the only synced state — one
+  `aws s3 cp` each way — and `mlruns/` syncing dies before it was born.
+- **The env-presence switch earns its third use.** `MLFLOW_STATE_BUCKET` set →
+  S3 artifact root + sync; unset → fully local and AWS-free. Same pattern as
+  `PREDICTION_LOG_BUCKET`: infra knowledge is injected, never baked into code,
+  and tests force the unset state via an autouse fixture so a developer's shell
+  exports can't make the suite touch AWS.
+- **Guard the trap, don't document it.** If the bucket is set but the experiment
+  carries a local artifact root (a pre-shared-state DB), training refuses to run
+  with an explanation — the failure mode is eliminated by a check, not a README
+  warning. Corollary: the laptop-era mlflow.db was archived, not uploaded;
+  shared history starts the day tracking became shared infrastructure.
+- **Registry aliases are deployment metadata, not history.** `challenger` always
+  points at the latest trained version (set by train), `champion` at what
+  deploys (moved only by the gate — task 4). Evaluate logs test metrics onto
+  the challenger's *run*, so every version permanently carries the numbers it
+  will one day defend as champion. The first version bootstraps as both — a
+  registry without a champion would deadlock the gate.
+
 ## 2026-07-18 — Data validation: a schema is a contract, a dep edge is a gate
 
 - **Pandera validates dataframes, so give it a dataframe worth validating.** The

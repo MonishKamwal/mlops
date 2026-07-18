@@ -35,9 +35,12 @@ from torch.utils.data import DataLoader, TensorDataset
 from quickdraw.config import TrainingParams, load_training_params
 from quickdraw.data.preprocess import bitmap_to_model_input
 from quickdraw.training.model import QuickDrawCNN, save_checkpoint
-
-MLFLOW_EXPERIMENT = "quickdraw"
-DEFAULT_TRACKING_URI = "sqlite:///mlflow.db"
+from quickdraw.training.registry import (
+    DEFAULT_TRACKING_URI,
+    MLFLOW_EXPERIMENT,
+    ensure_experiment,
+    register_challenger,
+)
 
 
 def select_device() -> torch.device:
@@ -115,14 +118,13 @@ def train_model(
         model.parameters(), lr=params.learning_rate, weight_decay=params.weight_decay
     )
 
-    mlflow.set_tracking_uri(tracking_uri)
-    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    ensure_experiment(tracking_uri)
     model_dir.mkdir(parents=True, exist_ok=True)
     model_path = model_dir / "model.pt"
     best_accuracy = -1.0
     best_epoch = 0
     best_state: dict[str, torch.Tensor] = {}
-    with mlflow.start_run():
+    with mlflow.start_run() as run:
         mlflow.log_params(
             {
                 **asdict(params),
@@ -162,7 +164,9 @@ def train_model(
         )
         mlflow.log_metric("best_val_accuracy", best_accuracy)
         mlflow.log_artifact(str(model_path))
+        version = register_challenger(run.info.run_id, tracking_uri)
     print(f"best epoch {best_epoch} (val_accuracy={best_accuracy:.4f}); wrote {model_path}")
+    print(f"registered model '{MLFLOW_EXPERIMENT}' version {version} as challenger")
     return model_path
 
 

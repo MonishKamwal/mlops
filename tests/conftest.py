@@ -27,6 +27,16 @@ class FakeS3Client:
         self.puts.append(kwargs)
 
 
+@pytest.fixture(autouse=True)
+def aws_free_mlflow(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests must stay AWS-free even if the developer's shell exports the bucket.
+
+    With MLFLOW_STATE_BUCKET set, training would create S3-rooted experiments and
+    try to upload artifacts — hermetic tests always use local artifact roots.
+    """
+    monkeypatch.delenv("MLFLOW_STATE_BUCKET", raising=False)
+
+
 @pytest.fixture(scope="session")
 def serving_classes() -> list[str]:
     return SERVING_TEST_CLASSES
