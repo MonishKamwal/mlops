@@ -4,6 +4,28 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-18 — Shipping day: mutable tags, pinned digests, safe intermediate states
+
+- **Pushing `:latest` deploys nothing.** Lambda resolves the tag to an image *digest*
+  at deploy time and pins it — ECR tags are mutable pointers; function config is
+  immutable fact. A new image under the same tag is invisible until "Deploy new
+  image" (or `update-function-code`) re-resolves the tag. This is also why
+  Terraform's `image_uri` shows no drift: the function reports its pinned digest,
+  not the moving tag. Phase 2's deploy workflow automates exactly this
+  re-resolution step.
+- **Order the rollout so every intermediate state is safe.** Apply → push → deploy
+  meant: first an env var landed on a function whose code ignores it; then the new
+  image sat in ECR serving nothing; only the final console deploy changed behavior —
+  by which point its permission and config already existed. Every step individually
+  reversible, API live throughout. The reverse order (code before config) would
+  have been safe here too, but only because the logger fails open — ordering
+  discipline is what makes rollouts safe *without* relying on such properties.
+- **Fail-open logging inverts the verification.** An S3 failure costs a log line,
+  never a prediction — so a working canvas proves nothing about logging, and the
+  only trustworthy signal is objects appearing in the bucket. Hence the DoD was
+  "draw, then watch `predictions/dt=…/` accumulate in the S3 Console" rather than
+  any API response. It accumulated.
+
 ## 2026-07-06 — Prediction logging on Lambda: the freeze changes the design
 
 - **Lambda freezes the container the instant the response returns.** Anything

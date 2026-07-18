@@ -57,6 +57,16 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-18 (personal laptop)** — **Task 6 shipped → Phase 1 complete.** Ran the
+  ship runbook end to end: PR #7 was already merged; `terraform apply` (1 add /
+  2 change — inline `prediction-logs-put` policy, `PREDICTION_LOG_BUCKET` env var,
+  role-description text); new arm64 image built + pushed (digest `51ee3bd6…`,
+  +boto3, single-manifest via `--provenance=false`); deployed via Lambda Console
+  "Deploy new image". Verified: `/healthz` + `/model-info` answer on the new image
+  (model sha unchanged `a54dd404…`), Monish drew on the live site, and JSONL
+  objects are accumulating under `predictions/dt=2026-07-18/` in the logs bucket —
+  the last Phase 1 DoD. Shipping-day lessons (tag-vs-digest, safe rollout ordering,
+  fail-open verification) added to LEARNING.md.
 - **2026-07-06 (personal laptop, late night)** — **Phase 1 task 5 closed**: both PRs
   merged, Monish drew on the live site and got a real prediction — CORS, cold-start
   UX, and the "stranger can draw" DoD verified in production. **Task 6 code written**
@@ -203,33 +213,32 @@ only, QuickDraw format; `/model-info` warm-up ping on load feeds the live class 
 + model sha/val-acc; "waking up" state past 2 s; top-3 confidence bars. Monish drew
 on the public site and got a real prediction.
 
-**Phase 1 task 6 (prediction logging v0) is code-complete, not yet live** (branch
-`phase1-logging`): JSONL records to `predictions/dt=YYYY-MM-DD/` in the logs bucket,
-synchronous + fail-open, switched on by `PREDICTION_LOG_BUCKET` (Terraform sets it;
-local stays AWS-free). Needs: apply, image rebuild/push, manual image deploy, then
-the "logs visibly accumulating in S3" DoD check — the last open line of Phase 1.
+**Phase 1 task 6 (prediction logging v0) is live and verified** (shipped 2026-07-18):
+every prediction writes one JSONL record to `predictions/dt=YYYY-MM-DD/` in
+`mlops-quickdraw-logs-ab1b` — synchronous, fail-open, append-only via IAM, switched
+on by `PREDICTION_LOG_BUCKET` (local `docker run`/tests stay AWS-free). DoD met:
+objects visibly accumulating from real drawings on the public site.
+
+**→ Phase 1 is complete.** The walking skeleton is fully live: data → training →
+serving → Lambda deploy → public canvas → prediction logging. Real visitor data has
+started accruing for Phase 4.
 
 ## Immediate next step (rolling — keep this precise)
 
-Ship task 6 (order matters only mildly — every intermediate state is safe):
+Start **Phase 2 — automation** (PLAN.md §5 Phase 2): no manual steps between "merge
+to main" and "new model live", with a quality gate that can say no.
 
-1. PR `phase1-logging` → main, merge when CI is green.
-2. `terraform apply` in `infra/persistent/` (adds the exec-role S3 policy + the
-   Lambda env var; plan ≈ 2 add / 1 change; `image_uri` drift stays ignored).
-3. Rebuild + push the image (same as task 4, from repo root):
-   `aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 152439497402.dkr.ecr.us-east-2.amazonaws.com`
-   then `docker buildx build --platform linux/arm64 --provenance=false -t 152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api:latest --push .`
-4. Deploy the new image (pushing `:latest` does NOT update the function — the
-   digest is pinned): Lambda Console → `quickdraw-api` → *Image* tab → **Deploy new
-   image** → Browse images → `quickdraw-api` : `latest` → Save.
-5. Verify the DoD: draw on monishkamwal.github.io a few times → S3 Console →
-   `mlops-quickdraw-logs-ab1b` → `predictions/dt=2026-07-…/` — objects accumulating;
-   open one (S3 Select / download): fields present, no PII. `/healthz` +
-   `/model-info` still answer; canvas still predicts.
-6. That closes **all of Phase 1** — update this file, then start Phase 2 (DVC,
-   CI/CD training pipeline, quality gate, evidence hub; PLAN.md §5 Phase 2). First
-   real exercise of the untested GitHub OIDC assume-role path arrives there.
+1. **Task 1 (DVC):** `dvc init` with S3 remote (data bucket), `dvc.yaml` stages
+   `download → validate → preprocess → train → evaluate → export`; `dvc repro`
+   becomes *the* way to run the pipeline. (Validation stage can be a stub until
+   task 2 fills it with Pandera.)
+2. Then in order: task 2 (Pandera validation), task 3 (MLflow db + artifacts on S3,
+   single-writer concurrency), task 4 (`gate.py` champion/challenger), task 5 (CI
+   workflows — `train-deploy.yml` is the first real exercise of the untested OIDC
+   assume-role path), task 6 (evidence hub Pages), task 7 (model card).
+3. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`
+   check) via GitHub UI once required checks are worth enforcing.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
-uses it (Phase 2); EKS-on-free-plan question parked until Phase 3 Task 0; markdownlint
-style nits in PLAN.md are known and not CI-checked.
+uses it (Phase 2 task 5); EKS-on-free-plan question parked until Phase 3 Task 0;
+markdownlint style nits in PLAN.md are known and not CI-checked.
