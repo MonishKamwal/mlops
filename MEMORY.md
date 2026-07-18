@@ -57,6 +57,19 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-18 (personal laptop, night)** — **Phase 2 task 2 (Pandera validation)
+  built and verified** (branch `phase2-validate`): `data/validate.py` reduces the
+  npz to a per-(split, class) metadata dataframe (count, pixel min/max, mean ink)
+  and a `DataFrameSchema` checks exact split sizes, full label set per split,
+  label↔class order vs params.yaml, pixel/ink sanity (loose-then-calibrate bounds:
+  ink peak ≥ 200, mean ink 0.01–0.40); tensor dtypes/shapes + artifact class list
+  checked as ValueErrors first. **Stage placed between preprocess and train**
+  (PLAN.md amended — all prescribed checks describe the processed artifact); train
+  deps include the report file, so validation is a gate by DAG structure. Report
+  is timestamp-free (deterministic DVC out, byte-identical run-to-run — tested).
+  pandera+pandas → `train` group. Repro: validate passed (45 rows); train re-ran
+  (dep list changed) → **byte-identical model.pt → DVC skipped evaluate+export**
+  (same-machine seeded training is byte-deterministic). 7 new tests (85 total).
 - **2026-07-18 (personal laptop, later)** — **Phase 2 task 1 (DVC) built and verified**
   (branch `phase2-dvc`): `dvc[s3]` added to the `train` group (stays out of the
   serving image); `dvc init`, remote `storage` = `s3://mlops-quickdraw-data-ab1b/dvc`
@@ -238,23 +251,26 @@ objects visibly accumulating from real drawings on the public site.
 serving → Lambda deploy → public canvas → prediction logging. Real visitor data has
 started accruing for Phase 4.
 
-**Phase 2 task 1 (DVC) is built and verified locally** (branch `phase2-dvc`):
-5-stage `dvc.yaml` (no `validate` yet — that's task 2), S3 remote on the data
-bucket, `dvc repro` reproduced the 07-04 training metrics exactly, second repro =
-no-op, 78 tests green. `dvc repro` is now *the* way to run the pipeline.
+**Phase 2 task 1 (DVC) is merged** (PR #9, 2026-07-18, CI green): 6-stage
+`dvc.yaml`, S3 remote on the data bucket (raw is `push: false`, metrics.json
+git-tracked), repro reproduced training to 4 decimals, second repro = no-op.
+`dvc repro` is now *the* way to run the pipeline.
+
+**Phase 2 task 2 (Pandera validation) is built and verified locally** (branch
+`phase2-validate`): `validate` stage between preprocess and train (PLAN.md
+amended), gating train via a dep edge on the deterministic report; schema checks
+split sizes / label set / label↔class order / pixel+ink sanity; 85 tests green.
 
 ## Immediate next step (rolling — keep this precise)
 
-Finish task 1, then continue **Phase 2 — automation** (PLAN.md §5 Phase 2):
+Finish task 2, then continue **Phase 2 — automation** (PLAN.md §5 Phase 2):
 
-1. Task 1 close-out: `dvc push` (Monish — ~42 MB of derived artifacts), commit
-   (dvc.yaml, dvc.lock, .dvc/, metrics.json, tests, this file), PR `phase2-dvc` →
-   main.
-2. **Task 2 (Pandera):** `validate` stage between download and preprocess —
-   schemas over dataset metadata (per-class counts, pixel value ranges, label set,
-   split sizes); pipeline fails loudly on bad data.
-3. Then in order: task 3 (MLflow db + artifacts on S3, single-writer concurrency),
-   task 4 (`gate.py` champion/challenger), task 5 (CI workflows —
+1. Task 2 close-out: `dvc push` (Monish — just the validation report; model bytes
+   unchanged), commit, PR `phase2-validate` → main.
+2. **Task 3 (MLflow on S3):** CI pulls `mlflow.db` + artifact store from S3, runs
+   tracked training, pushes back; single-writer via workflow `concurrency` group;
+   registry with `champion` / `challenger` aliases.
+3. Then in order: task 4 (`gate.py` champion/challenger), task 5 (CI workflows —
    `train-deploy.yml` is the first real exercise of the untested OIDC assume-role
    path), task 6 (evidence hub Pages), task 7 (model card).
 4. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`

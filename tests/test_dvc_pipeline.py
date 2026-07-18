@@ -30,7 +30,14 @@ def out_paths(stage: dict) -> list[str]:
 
 
 def test_stages_present_in_pipeline_order():
-    assert list(load_pipeline()) == ["download", "preprocess", "train", "evaluate", "export"]
+    assert list(load_pipeline()) == [
+        "download",
+        "preprocess",
+        "validate",
+        "train",
+        "evaluate",
+        "export",
+    ]
 
 
 def test_every_code_dep_exists():

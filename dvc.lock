@@ -88,6 +88,10 @@ stages:
       hash: md5
       md5: ab3b27daa743297978cd3bc40d193198
       size: 41088939
+    - path: reports/data_validation.json
+      hash: md5
+      md5: 5b56cf495d56a05c63f04b0b2fada282
+      size: 302
     - path: src/quickdraw/config.py
       hash: md5
       md5: 651cefb97e810b381d68ec016098ad84
@@ -162,3 +166,48 @@ stages:
       hash: md5
       md5: d494001002ab0ac3eb7e25581a87af54
       size: 1707279
+  validate:
+    cmd: python -m quickdraw.data.validate
+    deps:
+    - path: data/processed/quickdraw.npz
+      hash: md5
+      md5: ab3b27daa743297978cd3bc40d193198
+      size: 41088939
+    - path: src/quickdraw/config.py
+      hash: md5
+      md5: 651cefb97e810b381d68ec016098ad84
+      size: 3078
+    - path: src/quickdraw/data/validate.py
+      hash: md5
+      md5: 734bc1f31694942e88060c42163907d3
+      size: 7591
+    params:
+      params.yaml:
+        data:
+          classes:
+          - airplane
+          - apple
+          - banana
+          - bicycle
+          - bird
+          - car
+          - cat
+          - clock
+          - dog
+          - face
+          - fish
+          - house
+          - star
+          - tree
+          - umbrella
+          samples_per_class: 10000
+          seed: 42
+          splits:
+            train: 0.8
+            val: 0.1
+            test: 0.1
+    outs:
+    - path: reports/data_validation.json
+      hash: md5
+      md5: 5b56cf495d56a05c63f04b0b2fada282
+      size: 302
