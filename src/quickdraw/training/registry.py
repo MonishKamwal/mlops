@@ -1,10 +1,12 @@
 """MLflow model registry semantics: every run is a challenger; the gate crowns champions.
 
-The registry is the pipeline's memory of "what is deployed" (``champion``) vs
-"what was just trained" (``challenger``). Training registers each new checkpoint
-as a model version and points ``challenger`` at it; evaluate logs test metrics to
-the challenger's run; the Phase 2 quality gate (task 4) compares challenger
-against champion and promotes the alias only when the new model is not worse.
+The registry is the pipeline's memory of "the best model validated so far"
+(``champion``) vs "what was just trained" (``challenger``). Training registers each
+new checkpoint as a model version and points ``challenger`` at it; evaluate logs
+test metrics to the challenger's run; the Phase 2 quality gate (task 4) compares
+challenger against champion, ships on pass, and moves the ``champion`` alias only on
+a strict improvement — so the alias is a non-eroding quality bar, not a record of
+what happens to be deployed.
 
 The very first version also becomes champion — there is nothing to compare
 against, and a registry without a champion would deadlock the gate.
@@ -79,6 +81,36 @@ def register_challenger(run_id: str, tracking_uri: str) -> str:
     except MlflowException:
         client.set_registered_model_alias(MODEL_NAME, CHAMPION, version.version)
     return str(version.version)
+
+
+def alias_test_accuracy(alias: str, tracking_uri: str) -> tuple[str, float]:
+    """Return ``(version, test_accuracy)`` for the model version behind an alias.
+
+    Raises if the aliased version's run never logged ``test_accuracy`` — evaluate
+    must run before the gate, and a silent 0.0 would let a broken pipeline promote
+    a model on garbage numbers. This is the gate's read side of the registry.
+    """
+    client = MlflowClient(tracking_uri=tracking_uri)
+    version = client.get_model_version_by_alias(MODEL_NAME, alias)
+    run = client.get_run(version.run_id)
+    if "test_accuracy" not in run.data.metrics:
+        raise RuntimeError(
+            f"{alias} (version {version.version}, run {version.run_id}) has no "
+            "test_accuracy metric — run evaluate before the gate."
+        )
+    return str(version.version), float(run.data.metrics["test_accuracy"])
+
+
+def promote_to_champion(version: str, tracking_uri: str) -> None:
+    """Point the ``champion`` alias at ``version``.
+
+    The gate calls this only when a challenger strictly beats the champion, so the
+    alias tracks the best model ever validated — the quality bar — rather than
+    whatever last shipped. Champion means *best*, not *live*.
+    """
+    MlflowClient(tracking_uri=tracking_uri).set_registered_model_alias(
+        MODEL_NAME, CHAMPION, version
+    )
 
 
 def log_test_metrics_to_challenger(metrics: dict, tracking_uri: str) -> str:

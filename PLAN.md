@@ -53,7 +53,7 @@ Each row is also an interview talking point: chosen tool, one-line why, and the 
 | Data validation | **Pandera** | Lightweight, code-first schemas; fits validating metadata + prediction-log dataframes; GE is table-report machinery this image dataset doesn't need | Great Expectations — richer HTML data docs, but heavy setup for ~2 dataframes |
 | Experiment tracking + registry | **MLflow with SQLite backend, state synced to S3, static HTML export** | SQLite backend enables the real Model Registry (file backend doesn't); single CI writer avoids concurrency issues; zero always-on cost | Managed MLflow (Databricks/self-hosted EC2) — always-on cost violates budget |
 | CI/CD | **GitHub Actions** | Free unlimited minutes on public repos; OIDC to AWS (no stored keys) | Nothing else is close for a public GitHub portfolio |
-| Registry→deploy gate | **Metric comparison vs current champion (alias in MLflow registry)** | Blocks deploy if accuracy regresses > ε; simple, explainable | Full shadow deploy — overkill at this scale |
+| Registry→deploy gate | **Metric comparison vs best-validated champion (alias in MLflow registry)** | Blocks deploy if accuracy regresses > ε; re-crowns only on a strict improvement so the bar never erodes; simple, explainable | Full shadow deploy — overkill at this scale |
 | IaC | **Terraform, two roots: `persistent/` and `ephemeral/`** | Persistent (S3/ECR/IAM/Lambda/budgets) applied once, ~$0 idle; ephemeral (VPC/EKS) created and destroyed weekly | Single root — one `destroy` mistake could delete state buckets and the live API |
 | TF state | **S3 backend with native S3 locking (TF ≥ 1.11)** | One less service to manage | DynamoDB lock table — the classic pattern, now unnecessary |
 | K8s deploy | **Helm chart, ClusterIP + `kubectl port-forward` for tests** | No public LB → no idle/hourly LB cost, no DNS/TLS yak-shaving, smaller attack surface; evidence is captured, not served live | NLB/ALB Ingress — the production answer; noted in the chart as a values toggle |
@@ -263,8 +263,20 @@ that can say no. Evidence hub goes live.
    > laptop-era `mlflow.db` is archived, not shared: its experiment carries a local artifact
    > root — shared history starts the day tracking became shared infrastructure.
 4. **Quality gate (`gate.py`):** challenger must beat champion's test accuracy − ε (ε=0.5pp) AND
-   exceed absolute floor (85%). Pass → promote alias, proceed; fail → workflow fails with a
-   metric-diff summary in the job annotation.
+   exceed absolute floor (85%). Pass → proceed (ship the challenger); fail → workflow fails with
+   a metric-diff summary in the job annotation.
+
+   > **Amended 2026-07-20:** *deploy and re-crown are decoupled.* Passing means "ship this
+   > challenger"; the `champion` alias moves only on a **strict improvement**
+   > (`challenger > champion`), not on every pass. So `champion` is the best model ever
+   > validated — a non-eroding quality bar — rather than a record of what's deployed. The
+   > original "pass → promote" would let a string of within-ε challengers ratchet the champion
+   > (hence the gate's own baseline) down by up to ε each run; anchoring to the high-water mark
+   > removes that drift. Trade-off, taken deliberately: the live model may sit up to ε below
+   > champion, and no alias tracks "currently deployed" — the deploy workflow's built image is
+   > the source of truth for what's live, while `champion` is the quality reference the gate
+   > compares against. `gate.py` is a CLI run *after* `dvc repro`, not a DVC stage: it mutates
+   > registry state and reads S3-synced MLflow, so it's orchestration, not a pure pipeline step.
 5. **CI workflows:**
    - `ci.yml` (PRs): ruff, pytest, docker build (no push). Make it a required check via
      GitHub UI: repo → *Settings → Branches → Add branch ruleset* on `main`.
@@ -320,7 +332,9 @@ and destroyed automatically, at ~$0 idle cost.
    `values.yaml` toggle for LoadBalancer (documented, not used in the weekly run).
 3. **`eks-demo.yml` (weekly schedule + `workflow_dispatch`):**
    1. `terraform apply` (ephemeral root)
-   2. `helm upgrade --install` current champion image
+   2. `helm upgrade --install` the current production image (the image the Lambda tier is
+      serving — i.e. the last challenger to pass the gate; `champion` is the quality baseline,
+      not necessarily the deployed version — see Phase 2 task 4)
    3. Smoke tests via `kubectl port-forward` (same test suite as Lambda smoke tests)
    4. k6 load test through the port-forward (e.g., 20 VUs / 3 min) → HTML report
    5. Capture evidence: `kubectl get all -o wide`, `kubectl top nodes/pods`, rollout history,

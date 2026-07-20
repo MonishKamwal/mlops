@@ -57,6 +57,26 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-20 (personal laptop)** — **Phase 2 task 4 (quality gate) built and
+  verified** (branch `phase2-gate`): `training/gate.py` — reads champion's and
+  challenger's `test_accuracy` from the registry (new `registry.alias_test_accuracy`
+  + `registry.promote_to_champion` helpers), applies floor + no-regression policy
+  (`decide()`, pure), exits nonzero with a markdown metric-diff summary on fail
+  (also appended to `$GITHUB_STEP_SUMMARY` when set). Thresholds in new `gate:`
+  params section (`min_test_accuracy 0.85`, `epsilon 0.005`) via
+  `config.GateParams`/`load_gate_params`. NOT a DVC stage (mutates registry, reads
+  S3-synced MLflow) — runs after `dvc repro` in task 5's workflow.
+  **Deploy and re-crown are decoupled (PLAN task 4 amended 2026-07-20):** pass →
+  ship the challenger; the `champion` alias moves ONLY on a strict improvement
+  (`challenger > champion`), so champion = best-ever quality bar and the gate's
+  baseline never ratchets down. `champion` no longer means "deployed"; nothing
+  tracks the live version (the workflow's built image is the source of truth).
+  `run_gate` reads champion before promoting; `GateDecision` carries both `passed`
+  and `promoted`. Demoed 3 paths on throwaway DBs: strict improvement ships + re-
+  crowns; within-ε ships without re-crowning (bar holds); crippled 0.71 challenger
+  → FAIL (floor + regression), exit 1, champion unchanged. 19 new tests (110 total),
+  ruff clean. Adding `gate:` to params.yaml invalidates no DVC stage (no stage deps
+  on the whole file or that section).
 - **2026-07-18 (personal laptop, late night)** — **Phase 2 task 3 (MLflow on S3)
   built and bootstrapped** (branch `phase2-mlflow`): `training/registry.py` —
   model `quickdraw`, every train run registers its checkpoint as a version +
@@ -277,26 +297,39 @@ git-tracked), repro reproduced training to 4 decimals, second repro = no-op.
 `validate` stage between preprocess and train (PLAN.md amended), gating train via
 a dep edge on the deterministic report.
 
-**Phase 2 task 3 (MLflow on S3) is built and bootstrapped** (branch
-`phase2-mlflow`): registry semantics live (v1 = champion = challenger, run
-`fc1582c3…` with test metrics), canonical `mlflow.db` + artifacts on S3,
-`scripts/mlflow_sync.sh` for the DB, `MLFLOW_STATE_BUCKET` env switch. The
-laptop-era DB is archived locally as `mlflow.local.db`. 91 tests green.
+**Phase 2 task 3 (MLflow on S3) is merged** (PR #11, 2026-07-18, CI green):
+registry semantics live (v1 = champion = challenger, run `fc1582c3…` with test
+metrics), canonical `mlflow.db` + artifacts on S3, `scripts/mlflow_sync.sh` for
+the DB, `MLFLOW_STATE_BUCKET` env switch. The laptop-era DB is archived locally
+as `mlflow.local.db`.
+
+**Phase 2 task 4 (quality gate) is built and verified** (branch `phase2-gate`,
+not yet committed/PR'd): `training/gate.py` gates challenger vs champion on
+`test_accuracy` — absolute floor 0.85 AND no regression beyond ε=0.005 (thresholds
+in the new `gate:` params section). Pass → ship the challenger + exit 0; fail →
+metric-diff summary (stdout + `$GITHUB_STEP_SUMMARY`) + exit 1. **Deploy and
+re-crown decoupled:** the `champion` alias moves only on a strict improvement, so
+champion = best-ever quality bar (not "deployed") and the gate baseline can't
+ratchet down (PLAN task 4 amended 2026-07-20). CLI run after `dvc repro`, not a
+DVC stage. 110 tests green, ruff clean. Three paths demoed on throwaway DBs.
 
 ## Immediate next step (rolling — keep this precise)
 
-Finish task 3, then continue **Phase 2 — automation** (PLAN.md §5 Phase 2):
+Continue **Phase 2 — automation** (PLAN.md §5 Phase 2):
 
-1. Task 3 close-out: commit + PR `phase2-mlflow` → main.
-2. **Task 4 (quality gate):** `gate.py` — challenger must beat champion's
-   test_accuracy − ε (ε = 0.5pp) AND clear the absolute floor (85%); pass →
-   promote `champion` alias; fail → nonzero exit with a metric-diff summary.
-   Both numbers come from the registry (aliases → runs → metrics — wired in
-   task 3). Add gate thresholds to params.yaml per PLAN.
-3. Then: task 5 (CI workflows — `train-deploy.yml` calls `mlflow_sync.sh
-   pull` → `dvc repro` → gate → build/push → deploy; first real exercise of the
-   untested OIDC path; single-writer `concurrency` group), task 6 (evidence hub
-   Pages), task 7 (model card).
+1. Task 4 close-out: commit + PR `phase2-gate` → main (code is built + green on
+   this branch; nothing committed yet).
+2. **Task 5 (CI workflows):** `ci.yml` already exists (PR lint/test/build). Add
+   `train-deploy.yml` (push to `main` touching `src/`/`dvc.yaml`/`params.yaml` +
+   `workflow_dispatch`): `mlflow_sync.sh pull` → `dvc repro` → `python -m
+   quickdraw.training.gate` → build/push image to ECR (tag = git SHA) → `aws lambda
+   update-function-code` → smoke-test the Function URL → `mlflow_sync.sh push` →
+   publish evidence. **First real exercise of the untested OIDC assume-role path.**
+   Single-writer `concurrency` group so two runs never fight over `mlflow.db`. Then
+   demo a *failing* gate as a linked CI run (crippled-lr model on a branch) — a
+   Phase 2 DoD item.
+3. Then: task 6 (evidence hub Pages — `mlflow_static_export.py` + eval reports +
+   badges), task 7 (model card `MODEL_CARD.md`).
 4. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`
    check) via GitHub UI once required checks are worth enforcing.
 

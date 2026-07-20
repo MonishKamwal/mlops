@@ -4,6 +4,49 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-20 — The quality gate: decouple "ship it" from "it's the new best"
+
+- **The gate is the part of the system allowed to say "no".** Everything upstream
+  produces a model; the gate is the one component whose job is to *refuse* to ship
+  one. Two rules from `params.yaml`: an absolute floor (`min_test_accuracy`, so
+  "better than a bad champion" isn't enough) and a no-regression band
+  (`challenger ≥ champion − epsilon`). Pass → exit 0 → deploy proceeds; fail →
+  metric-diff summary + exit 1 → the workflow dies before anything ships. A nonzero
+  exit code *is* the enforcement — a Python `sys.exit(main())` returning 1 is what
+  stops the next CI step.
+- **ε exists because training isn't bit-exact everywhere.** Seed-identical runs are
+  byte-identical on CPU but not on GPU backends; without a tolerance band, a 0.001
+  wobble would block every deploy. ε=0.5pp treats sub-noise dips as noise.
+- **The subtle bug ε introduces, and the fix: separate "deploy" from "re-crown".**
+  The naive design is *pass ⟹ promote champion*. But then a string of within-ε
+  challengers each becomes champion, and because the gate compares against champion,
+  its own baseline *ratchets* down by up to ε every run — the bar you're enforcing
+  quietly erodes. The fix is to decouple the two decisions: **passing means "ship
+  this challenger"; the champion alias moves only on a *strict* improvement**
+  (`challenger > champion`). So `champion` is the best model ever validated — a fixed
+  high-water mark — and the gate's baseline can't drift. This is why `run_gate`
+  computes `promoted = passed and challenger > champion` separately from `passed`.
+- **Every invariant you gain costs one you give up — name it.** With this split,
+  `champion` no longer means "what's deployed"; the live model may sit up to ε below
+  it, and *no* alias tracks the deployed version (the deploy workflow's built image
+  is the source of truth for what's live). That's an acceptable trade for a
+  non-eroding quality bar, but it's a real change in what the alias *means* — worth
+  saying out loud rather than discovering later when something reads `champion`
+  expecting "production".
+- **Read before you write.** `run_gate` reads the champion's accuracy *before* any
+  promotion — otherwise, after promoting, it would be comparing a model against
+  itself. Order matters when the thing you compare against is the thing you mutate.
+- **Not every step belongs in the DVC DAG.** The gate mutates registry state (moves
+  an alias) and reads it from S3-synced MLflow — neither pure nor file-hashable, so
+  it can't be a `dvc repro` stage. It's a CLI run *after* repro, wired as
+  `dvc repro → gate → build/push` in the deploy workflow (task 5). Rule of thumb:
+  DVC stages are reproducible functions of files; anything with external side
+  effects or registry reads is orchestration, not pipeline.
+- **Keep policy pure, keep I/O thin.** `decide()` is a side-effect-free function of
+  three floats returning `(passed, reasons)`, so the entire pass/fail matrix is a
+  six-line parametrized unit test with no MLflow at all; `run_gate()` does the alias
+  reads and the one conditional promotion. Testing the policy shouldn't need a database.
+
 ## 2026-07-18 — MLflow state goes to S3: sync the DB, never the artifacts
 
 - **MLflow bakes absolute paths into the tracking DB.** Each experiment records

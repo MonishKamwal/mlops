@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from quickdraw.config import load_data_params, load_training_params
+from quickdraw.config import load_data_params, load_gate_params, load_training_params
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -24,6 +24,12 @@ training:
   weight_decay: 0.0001
   dropout: 0.3
   seed: 42
+"""
+
+VALID_GATE = """\
+gate:
+  min_test_accuracy: 0.85
+  epsilon: 0.005
 """
 
 
@@ -98,3 +104,27 @@ def test_rejects_negative_learning_rate(tmp_path: Path) -> None:
     bad = VALID_TRAINING.replace("learning_rate: 0.001", "learning_rate: -0.001")
     with pytest.raises(ValueError, match="learning_rate"):
         load_training_params(write_params(tmp_path, bad))
+
+
+def test_loads_valid_gate_params(tmp_path: Path) -> None:
+    params = load_gate_params(write_params(tmp_path, VALID_GATE))
+    assert params.min_test_accuracy == 0.85
+    assert params.epsilon == 0.005
+
+
+def test_committed_gate_params_are_valid() -> None:
+    params = load_gate_params(REPO_ROOT / "params.yaml")
+    assert 0 < params.min_test_accuracy <= 1
+    assert params.epsilon >= 0
+
+
+def test_rejects_negative_epsilon(tmp_path: Path) -> None:
+    bad = VALID_GATE.replace("epsilon: 0.005", "epsilon: -0.01")
+    with pytest.raises(ValueError, match="epsilon"):
+        load_gate_params(write_params(tmp_path, bad))
+
+
+def test_rejects_floor_above_one(tmp_path: Path) -> None:
+    bad = VALID_GATE.replace("min_test_accuracy: 0.85", "min_test_accuracy: 1.5")
+    with pytest.raises(ValueError, match="min_test_accuracy"):
+        load_gate_params(write_params(tmp_path, bad))
