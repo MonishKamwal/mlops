@@ -1,0 +1,146 @@
+# Train → gate → deploy (PLAN.md §5 Phase 2, task 5).
+#
+# The no-manual-steps path from "merge to main" to "new model live": reproduce the
+# pipeline, let the quality gate say yes or no, and only on a yes build the arm64
+# serving image, push it to ECR, and re-point the Lambda at it. This is the first
+# workflow to assume the AWS role via OIDC — no stored keys; GitHub mints a
+# short-lived token that AWS trades for temporary credentials (infra/persistent/iam.tf
+# pins the trust to this repo).
+name: Train & Deploy
+
+on:
+  # Only model-affecting changes redeploy — docs/test-only merges don't retrain.
+  # Editing this workflow doesn't match these paths, so it won't fire on its own
+  # merge: the first run is a deliberate manual dispatch (safe OIDC smoke test).
+  push:
+    branches: [main]
+    paths:
+      - src/quickdraw/**
+      - dvc.yaml
+      - dvc.lock
+      - params.yaml
+      - Dockerfile
+      - uv.lock
+  workflow_dispatch:
+
+permissions:
+  id-token: write # mint the OIDC token to assume the AWS role
+  contents: read
+
+# Single writer for the shared MLflow DB: never let two runs push mlflow.db at
+# once. Queue rather than cancel — a cancelled deploy could leave Lambda and the
+# registry disagreeing, so we let an in-flight run finish.
+concurrency:
+  group: train-deploy
+  cancel-in-progress: false
+
+jobs:
+  train-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      MLFLOW_STATE_BUCKET: ${{ vars.MLFLOW_STATE_BUCKET }}
+      ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+      API_FUNCTION_URL: ${{ vars.API_FUNCTION_URL }}
+      LAMBDA_FUNCTION_NAME: quickdraw-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.GHA_APP_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The 1.7 GB raw QuickDraw archives are push:false in DVC (Google's GCS is the
+      # canonical source), so they can't be `dvc pull`ed — cache them across runs
+      # instead of re-downloading every deploy. Keyed on params.yaml: a class-list
+      # change busts it and the download stage re-fetches.
+      - name: Cache raw dataset
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: dvc-raw-${{ hashFiles('params.yaml') }}
+
+      - name: Pull MLflow state from S3
+        run: scripts/mlflow_sync.sh pull
+
+      # Restores unchanged upstream artifacts (processed npz, prior model) so repro
+      # only re-runs what the change touched. `raw` is push:false, so pull always
+      # reports it as missing — that one failure is expected; repro rebuilds it.
+      - name: Pull DVC artifacts (best-effort)
+        run: uv run dvc pull || echo "some outs are not in the remote (raw is push:false) — repro will rebuild them"
+
+      - name: Reproduce the pipeline (download → … → train → evaluate → export)
+        run: uv run dvc repro
+
+      # Exits non-zero on a regression, which fails the job here and skips every
+      # deploy step below. The metric-diff summary lands in the job summary.
+      - name: Quality gate
+        run: uv run python -m quickdraw.training.gate
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # arm64 to match the Lambda's architecture; --provenance=false keeps the push
+      # a single-platform manifest (Lambda rejects the multi-manifest OCI index that
+      # buildx emits by default — a Phase 1 shipping-day lesson). Deploy by digest,
+      # not tag: tags are mutable pointers, the digest is the immutable fact.
+      - name: Build and push the serving image
+        id: build
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login --username AWS --password-stdin "${ECR_REPOSITORY_URL%%/*}"
+          docker buildx build \
+            --platform linux/arm64 \
+            --provenance=false \
+            --tag "$ECR_REPOSITORY_URL:${GITHUB_SHA::12}" \
+            --metadata-file metadata.json \
+            --push .
+          digest=$(jq -r '."containerimage.digest"' metadata.json)
+          echo "image=${ECR_REPOSITORY_URL}@${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Lambda
+        run: |
+          set -euo pipefail
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --image-uri "${{ steps.build.outputs.image }}" >/dev/null
+          # update-function-code returns before the swap completes; wait for it.
+          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
+
+      # Prove the *new* model is live, not just that the URL answers: /model-info
+      # reports sha256(model.onnx), which must equal the artifact we just built.
+      # Retries absorb the cold start after a code update.
+      - name: Smoke test the live Function URL
+        run: |
+          set -euo pipefail
+          expected=$(sha256sum models/model.onnx | cut -d' ' -f1)
+          for attempt in $(seq 1 12); do
+            live=$(curl -fsS --max-time 10 "${API_FUNCTION_URL%/}/model-info" | jq -r '.model_sha256') && break
+            echo "attempt $attempt: not ready yet, retrying…"
+            sleep 5
+          done
+          echo "expected=$expected"
+          echo "live=$live"
+          test "$expected" = "$live"
+
+      # Persist the registry (challenger registration, test metrics, and any
+      # champion promotion) even when the gate blocked the deploy — a blocked
+      # challenger is real lineage. Always-run; the bucket is versioned (undo) and
+      # the concurrency group guarantees we're the only writer.
+      - name: Push MLflow state to S3
+        if: always()
+        run: scripts/mlflow_sync.sh push

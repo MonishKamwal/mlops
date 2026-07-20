@@ -57,6 +57,25 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-20 (personal laptop, later)** — **Phase 2 task 5 (train-deploy
+  workflow) built, NOT yet run** (branch `phase2-train-deploy`):
+  `.github/workflows/train-deploy.yml` — on push to `main` touching
+  `src/quickdraw/**`/`dvc.yaml`/`dvc.lock`/`params.yaml`/`Dockerfile`/`uv.lock`
+  (+ `workflow_dispatch`): OIDC assume `gha-app` → `mlflow_sync.sh pull` →
+  `dvc pull` (best-effort; raw is push:false so it always reports raw missing) →
+  `dvc repro` → `gate` → build **arm64** image (QEMU + buildx,
+  `--provenance=false`, deploy **by digest**) → push ECR → `lambda
+  update-function-code` + `wait function-updated` → smoke test (assert live
+  `/model-info.model_sha256` == `sha256sum models/model.onnx`) → `mlflow_sync.sh
+  push` (`if: always()` so a blocked challenger's lineage still persists).
+  `concurrency: train-deploy`, `cancel-in-progress: false` (single writer for
+  mlflow.db). `gha-app` IAM role already grants everything (S3 both buckets, ECR
+  push, `lambda:UpdateFunctionCode` on `quickdraw-*`) — no Terraform change
+  needed. Editing the workflow doesn't match the path filter, so it won't fire on
+  its own merge → first run is a deliberate manual dispatch (safe OIDC smoke
+  test). **BLOCKED on 3 repo variables Monish must add via GitHub UI** (see
+  Immediate next step). YAML validated; the OIDC + arm64-build paths are
+  unexercised until the first dispatch.
 - **2026-07-20 (personal laptop)** — **Phase 2 task 4 (quality gate) built and
   verified** (branch `phase2-gate`): `training/gate.py` — reads champion's and
   challenger's `test_accuracy` from the registry (new `registry.alias_test_accuracy`
@@ -315,22 +334,29 @@ DVC stage. 110 tests green, ruff clean. Three paths demoed on throwaway DBs.
 
 ## Immediate next step (rolling — keep this precise)
 
-Continue **Phase 2 — automation** (PLAN.md §5 Phase 2):
+Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Task 5's workflow is
+written on `phase2-train-deploy`; to make it runnable:
 
-1. Task 4 close-out: commit + PR `phase2-gate` → main (code is built + green on
-   this branch; nothing committed yet).
-2. **Task 5 (CI workflows):** `ci.yml` already exists (PR lint/test/build). Add
-   `train-deploy.yml` (push to `main` touching `src/`/`dvc.yaml`/`params.yaml` +
-   `workflow_dispatch`): `mlflow_sync.sh pull` → `dvc repro` → `python -m
-   quickdraw.training.gate` → build/push image to ECR (tag = git SHA) → `aws lambda
-   update-function-code` → smoke-test the Function URL → `mlflow_sync.sh push` →
-   publish evidence. **First real exercise of the untested OIDC assume-role path.**
-   Single-writer `concurrency` group so two runs never fight over `mlflow.db`. Then
-   demo a *failing* gate as a linked CI run (crippled-lr model on a branch) — a
-   Phase 2 DoD item.
-3. Then: task 6 (evidence hub Pages — `mlflow_static_export.py` + eval reports +
-   badges), task 7 (model card `MODEL_CARD.md`).
-4. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`
+1. **Monish, GitHub UI — add 3 repo variables** (repo → *Settings → Secrets and
+   variables → Actions → Variables → New repository variable*). Values are the
+   `terraform output`s in `infra/persistent` (or from the Facts section above):
+   - `MLFLOW_STATE_BUCKET` = `mlops-quickdraw-data-ab1b`
+   - `ECR_REPOSITORY_URL` = `152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api`
+   - `API_FUNCTION_URL` = `https://u4udjs3pbrr6xlaanmcpdb7bty0amoeh.lambda-url.us-east-2.on.aws/`
+   (`AWS_REGION` and `GHA_APP_ROLE_ARN` already exist.)
+2. Commit + PR `phase2-train-deploy` → main. It won't auto-run on merge (path
+   filter excludes the workflow file itself).
+3. **First run = manual `workflow_dispatch`** from the Actions tab — the safe
+   first exercise of the OIDC assume-role path. Watch for: OIDC assume succeeds;
+   arm64 QEMU build + push; `update-function-code` + smoke test green (live
+   `/model-info` sha matches the freshly built onnx). If OIDC fails, check the
+   `gha_app_trust` `sub` condition (`repo:MonishKamwal/mlops:*`) and that
+   `id-token: write` is set. **After a green run, write the LEARNING.md entry**
+   (OIDC, arm64-via-QEMU-without-torch, digest-vs-tag redeploy) — deferred until
+   the paths are actually proven.
+4. Then demo a *failing* gate as a linked CI run (crippled-lr model on a branch) —
+   a Phase 2 DoD item. Then task 6 (evidence hub Pages), task 7 (model card).
+5. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`
    check) via GitHub UI once required checks are worth enforcing.
 
 Watch items: the GitHub OIDC assume-role path is untested until the first workflow
