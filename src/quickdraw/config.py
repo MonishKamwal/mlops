@@ -38,6 +38,18 @@ class TrainingParams:
     seed: int
 
 
+@dataclass(frozen=True)
+class GateParams:
+    """The ``gate:`` section of params.yaml — the deploy quality gate's thresholds.
+
+    ``min_test_accuracy`` is an absolute floor; ``epsilon`` is how far below the
+    champion's test accuracy a challenger may fall and still ship (seed-noise slack).
+    """
+
+    min_test_accuracy: float
+    epsilon: float
+
+
 def load_training_params(path: str | Path = "params.yaml") -> TrainingParams:
     """Load and validate the ``training:`` section of a params file."""
     raw = yaml.safe_load(Path(path).read_text())
@@ -60,6 +72,21 @@ def load_training_params(path: str | Path = "params.yaml") -> TrainingParams:
         raise ValueError("params.yaml: weight_decay must be non-negative")
     if not 0 <= params.dropout < 1:
         raise ValueError("params.yaml: dropout must be in [0, 1)")
+    return params
+
+
+def load_gate_params(path: str | Path = "params.yaml") -> GateParams:
+    """Load and validate the ``gate:`` section of a params file."""
+    raw = yaml.safe_load(Path(path).read_text())
+    gate = raw["gate"]
+    params = GateParams(
+        min_test_accuracy=float(gate["min_test_accuracy"]),
+        epsilon=float(gate["epsilon"]),
+    )
+    if not 0 < params.min_test_accuracy <= 1:
+        raise ValueError("params.yaml: gate.min_test_accuracy must be in (0, 1]")
+    if params.epsilon < 0:
+        raise ValueError("params.yaml: gate.epsilon must be non-negative")
     return params
 
 

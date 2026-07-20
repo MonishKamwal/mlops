@@ -62,6 +62,31 @@ def test_metrics_without_challenger_fail_loudly(tracking_uri):
         )
 
 
+def test_alias_test_accuracy_reads_the_metric(tracking_uri):
+    run_id = start_run(tracking_uri)
+    registry.register_challenger(run_id, tracking_uri)
+    registry.log_test_metrics_to_challenger({"test_accuracy": 0.88, "macro_f1": 0.87}, tracking_uri)
+    version, accuracy = registry.alias_test_accuracy(registry.CHALLENGER, tracking_uri)
+    assert version == "1"
+    assert accuracy == pytest.approx(0.88)
+
+
+def test_alias_test_accuracy_without_metric_fails_loudly(tracking_uri):
+    registry.register_challenger(start_run(tracking_uri), tracking_uri)  # no test metrics logged
+    with pytest.raises(RuntimeError, match="test_accuracy"):
+        registry.alias_test_accuracy(registry.CHALLENGER, tracking_uri)
+
+
+def test_promote_to_champion_moves_the_alias(tracking_uri):
+    registry.register_challenger(start_run(tracking_uri), tracking_uri)  # v1 = champion
+    second = registry.register_challenger(start_run(tracking_uri), tracking_uri)  # v2 = challenger
+    registry.promote_to_champion(second, tracking_uri)
+    champion = MlflowClient(tracking_uri=tracking_uri).get_model_version_by_alias(
+        registry.MODEL_NAME, registry.CHAMPION
+    )
+    assert str(champion.version) == "2"
+
+
 def test_s3_artifact_root_when_bucket_configured(tracking_uri, monkeypatch):
     monkeypatch.setenv(registry.STATE_BUCKET_ENV, "some-bucket")
     registry.ensure_experiment(tracking_uri)
