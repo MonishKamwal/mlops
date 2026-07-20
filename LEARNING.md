@@ -4,6 +4,43 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-20 — First OIDC deploy: the merge→live path, proven
+
+- **OIDC is keyless deploy — the credential is minted per run and expires.**
+  `id-token: write` lets GitHub mint a short-lived OIDC JWT; `configure-aws-credentials`
+  trades it at AWS STS via web-identity federation for ~1h temporary credentials. No
+  AWS access key is ever stored in the repo — nothing to rotate, nothing to leak. The
+  proof it worked is one log line: `Authenticated as … :GitHubActions`. The security
+  boundary isn't a secret, it's the trust policy (`infra/persistent/iam.tf`), which
+  pins the allowed subject to `repo:MonishKamwal/mlops:*` — only workflows in this repo
+  can assume `gha-app`.
+- **Prove risky new plumbing on your terms.** The workflow's `push` trigger ignores
+  changes to itself, so merging it didn't fire it — the first exercise of the untested
+  OIDC + arm64 paths was a deliberate `workflow_dispatch` with a human watching, not a
+  surprise on some future model merge. New infra plumbing should get its first run where
+  you can see it fail.
+- **arm64-via-QEMU is only cheap because the serving image has no torch.** Lambda runs
+  on Graviton (arm64); the amd64 runner cross-builds under QEMU emulation, and emulated
+  CPU work is slow. But the serving image installs onnxruntime only — torch lives in the
+  `train` group, excluded from the image — so the emulated `uv sync` stays light and the
+  whole build ran ~7.5 min. This is the earlier "one image, serving deps only" decision
+  paying off: with torch in the image, the emulated compile would have been brutal.
+- **`--provenance=false` + deploy by digest.** buildx defaults to pushing a multi-platform
+  OCI index (with a provenance attestation); Lambda's image loader rejects that and wants
+  a single-platform manifest — hence `--provenance=false` (a Phase 1 shipping-day lesson,
+  now automated). And the Lambda is pointed at `repo@sha256:…`, not a mutable `:latest`
+  tag: the digest is the immutable fact of exactly which bytes are live.
+- **The smoke test is what makes "deployed" mean "serving the new model".**
+  `update-function-code` succeeding only proves the API call worked. The real assertion
+  is `sha256(the onnx we just built)` == the live `/model-info.model_sha256`, retried
+  through the post-update cold start. Without that equality check a silently-stale image
+  would pass unnoticed — deploy verification should assert artifact identity, not just a 200.
+- **`dvc pull` reporting missing raw is success, not failure.** The 1.7 GB raw archives
+  are `push:false` (Google's GCS is canonical), so pull can never fetch them; the step is
+  best-effort (`|| echo …`) and `dvc repro` re-downloads raw from GCS. A cross-run
+  `actions/cache` on `data/raw` (keyed on `params.yaml`) keeps that download from
+  happening every deploy — a class-list change busts the key and re-fetches.
+
 ## 2026-07-20 — The quality gate: decouple "ship it" from "it's the new best"
 
 - **The gate is the part of the system allowed to say "no".** Everything upstream
