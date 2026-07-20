@@ -31,8 +31,10 @@ is the long-term what-and-why; this file is the current state and the exact next
   bucket `mlops-quickdraw-data-ab1b`, logs bucket `mlops-quickdraw-logs-ab1b`, ECR
   `152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api`, CI role
   `arn:aws:iam::152439497402:role/gha-app`. GitHub Actions repo variables
-  `AWS_REGION` and `GHA_APP_ROLE_ARN` are set. The OIDC assume-role path has never
-  been exercised — first real use comes with the Phase 2 workflows.
+  `AWS_REGION`, `GHA_APP_ROLE_ARN`, `MLFLOW_STATE_BUCKET`, `ECR_REPOSITORY_URL`,
+  and `API_FUNCTION_URL` are all set. **The OIDC assume-role path is proven** — the
+  train-deploy workflow assumed `gha-app` and deployed on 2026-07-20 (run
+  29751206896).
 - GitHub: `MonishKamwal/mlops`, trunk-based (feature branch → PR → main). Stale
   `develop`/`staging` remote branches were deleted 2026-07-03.
 - Working style (PLAN.md preamble): one-time/admin actions happen via **web UI** by Monish —
@@ -57,6 +59,20 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-20 (personal laptop, evening)** — **Phase 2 tasks 4 + 5 merged; first
+  train-deploy run green.** PR #12 (`phase2-gate`) and PR #13
+  (`phase2-train-deploy`) merged to main (CI green). Monish added the 3 repo
+  variables (`MLFLOW_STATE_BUCKET`, `ECR_REPOSITORY_URL`, `API_FUNCTION_URL`) via
+  the GitHub UI and fired the first `workflow_dispatch` — **train-deploy ran
+  end-to-end and passed** (run 29751206896, 9m24s): OIDC assumed `gha-app`
+  (first-ever use of the assume-role path) → `mlflow_sync.sh pull` → `dvc pull`
+  reported raw missing as expected → `dvc repro` → gate passed → arm64 QEMU build
+  pushed digest `sha256:400a4873…` → `update-function-code` + `wait
+  function-updated` → smoke test confirmed live `/model-info.model_sha256` ==
+  freshly built onnx → `mlflow_sync.sh push`. LEARNING.md entry written (OIDC
+  keyless deploy, arm64-via-QEMU-cheap-without-torch, `--provenance=false` + digest
+  deploy, smoke test as artifact-identity proof). **The merge→live path now has
+  zero manual steps.**
 - **2026-07-20 (personal laptop, later)** — **Phase 2 task 5 (train-deploy
   workflow) built, NOT yet run** (branch `phase2-train-deploy`):
   `.github/workflows/train-deploy.yml` — on push to `main` touching
@@ -322,8 +338,8 @@ metrics), canonical `mlflow.db` + artifacts on S3, `scripts/mlflow_sync.sh` for
 the DB, `MLFLOW_STATE_BUCKET` env switch. The laptop-era DB is archived locally
 as `mlflow.local.db`.
 
-**Phase 2 task 4 (quality gate) is built and verified** (branch `phase2-gate`,
-not yet committed/PR'd): `training/gate.py` gates challenger vs champion on
+**Phase 2 task 4 (quality gate) is merged** (PR #12, 2026-07-20, CI green):
+`training/gate.py` gates challenger vs champion on
 `test_accuracy` — absolute floor 0.85 AND no regression beyond ε=0.005 (thresholds
 in the new `gate:` params section). Pass → ship the challenger + exit 0; fail →
 metric-diff summary (stdout + `$GITHUB_STEP_SUMMARY`) + exit 1. **Deploy and
@@ -332,33 +348,36 @@ champion = best-ever quality bar (not "deployed") and the gate baseline can't
 ratchet down (PLAN task 4 amended 2026-07-20). CLI run after `dvc repro`, not a
 DVC stage. 110 tests green, ruff clean. Three paths demoed on throwaway DBs.
 
+**Phase 2 task 5 (train-deploy workflow) is merged and proven in production**
+(PR #13, 2026-07-20, CI green): `.github/workflows/train-deploy.yml` — fires on
+push to main touching model files (+ `workflow_dispatch`), `concurrency:
+train-deploy` (single writer for mlflow.db). Pipeline: OIDC assume `gha-app` →
+`mlflow_sync.sh pull` → `dvc pull` (best-effort) → `dvc repro` → gate → arm64 QEMU
+build (`--provenance=false`) → push ECR → Lambda `update-function-code` deploy **by
+digest** → smoke test (live `/model-info.model_sha256` == freshly built onnx) →
+`mlflow_sync.sh push` (`if: always()`). **First run green 2026-07-20** (manual
+dispatch, run 29751206896, 9m24s) — the OIDC assume-role path exercised for the
+first time. **The merge→live path now has zero manual steps** (Phase 2 DoD item met).
+
 ## Immediate next step (rolling — keep this precise)
 
-Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Task 5's workflow is
-written on `phase2-train-deploy`; to make it runnable:
+Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Tasks 1–5 are done: **the
+merge→live path is proven** (train-deploy ran green 2026-07-20, run 29751206896).
+Remaining Phase 2 work, in order:
 
-1. **Monish, GitHub UI — add 3 repo variables** (repo → *Settings → Secrets and
-   variables → Actions → Variables → New repository variable*). Values are the
-   `terraform output`s in `infra/persistent` (or from the Facts section above):
-   - `MLFLOW_STATE_BUCKET` = `mlops-quickdraw-data-ab1b`
-   - `ECR_REPOSITORY_URL` = `152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api`
-   - `API_FUNCTION_URL` = `https://u4udjs3pbrr6xlaanmcpdb7bty0amoeh.lambda-url.us-east-2.on.aws/`
-   (`AWS_REGION` and `GHA_APP_ROLE_ARN` already exist.)
-2. Commit + PR `phase2-train-deploy` → main. It won't auto-run on merge (path
-   filter excludes the workflow file itself).
-3. **First run = manual `workflow_dispatch`** from the Actions tab — the safe
-   first exercise of the OIDC assume-role path. Watch for: OIDC assume succeeds;
-   arm64 QEMU build + push; `update-function-code` + smoke test green (live
-   `/model-info` sha matches the freshly built onnx). If OIDC fails, check the
-   `gha_app_trust` `sub` condition (`repo:MonishKamwal/mlops:*`) and that
-   `id-token: write` is set. **After a green run, write the LEARNING.md entry**
-   (OIDC, arm64-via-QEMU-without-torch, digest-vs-tag redeploy) — deferred until
-   the paths are actually proven.
-4. Then demo a *failing* gate as a linked CI run (crippled-lr model on a branch) —
-   a Phase 2 DoD item. Then task 6 (evidence hub Pages), task 7 (model card).
-5. Also from Phase 2 planning: re-enable the `main` ruleset (required PR + `ci.yml`
-   check) via GitHub UI once required checks are worth enforcing.
+1. **Failing-gate demo** — a Phase 2 DoD item and, per PLAN, "the best CI/CD story."
+   On a branch, cripple the model (slash the lr or epochs in `params.yaml`) so the
+   challenger regresses; run train-deploy and watch the gate exit 1 and block every
+   deploy step. Keep the blocked run linked in the evidence hub as evidence.
+2. **Task 6 — evidence hub:** enable GitHub Pages on `mlops` (repo → *Settings →
+   Pages → Source: GitHub Actions*); add `mlflow_static_export.py` (runs table +
+   metric charts → static HTML) and `evidence-pages.yml`; publish eval report +
+   confusion matrix + CI badges; link/iframe from the portfolio site.
+3. **Task 7 — model card** (`MODEL_CARD.md`, rendered into the evidence hub).
+4. **Re-enable the `main` ruleset** (required PR + `ci.yml` check) via GitHub UI now
+   that CI is worth enforcing.
 
-Watch items: the GitHub OIDC assume-role path is untested until the first workflow
-uses it (Phase 2 task 5); EKS-on-free-plan question parked until Phase 3 Task 0;
-markdownlint style nits in PLAN.md are known and not CI-checked.
+Watch items: EKS-on-free-plan question parked until Phase 3 Task 0; several actions
+in `train-deploy.yml` still target Node 20 (GitHub is forcing them onto Node 24 —
+bump the action majors when convenient); markdownlint style nits in PLAN.md are
+known and not CI-checked.
