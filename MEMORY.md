@@ -59,6 +59,19 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-20 (personal laptop, evening, later)** — **Failing-gate demo: a bad
+  model was blocked in CI** (Phase 2 DoD item met). Branch `phase2-failing-gate`
+  (never merged) crippled training in `params.yaml` (1 epoch, lr 1e-5); a
+  `workflow_dispatch` run trained a 0.5049-test-accuracy challenger (registered as
+  **v3**), which the gate rejected on **both** rules — below the 0.85 floor AND a
+  −0.4121 regression vs champion — exiting 1 with a metric-diff summary. Every
+  deploy step skipped, the live Lambda untouched, champion held; `mlflow.db` still
+  pushed (`if: always()`) so the blocked challenger's lineage persists. **Evidence
+  run 29757829275** (kept linked for the task-6 hub). Discovered while reading the
+  gate output: the green run below re-crowned **champion to v2 @ 0.9170** (its CI
+  retrain drifted +0.13pp above the laptop's v1 0.9157 — cross-machine seed noise,
+  a strict improvement → promoted). Production has now exercised both gate paths:
+  re-crown-on-improvement and block-and-hold.
 - **2026-07-20 (personal laptop, evening)** — **Phase 2 tasks 4 + 5 merged; first
   train-deploy run green.** PR #12 (`phase2-gate`) and PR #13
   (`phase2-train-deploy`) merged to main (CI green). Monish added the 3 repo
@@ -66,7 +79,8 @@ is the long-term what-and-why; this file is the current state and the exact next
   the GitHub UI and fired the first `workflow_dispatch` — **train-deploy ran
   end-to-end and passed** (run 29751206896, 9m24s): OIDC assumed `gha-app`
   (first-ever use of the assume-role path) → `mlflow_sync.sh pull` → `dvc pull`
-  reported raw missing as expected → `dvc repro` → gate passed → arm64 QEMU build
+  reported raw missing as expected → `dvc repro` → gate passed (re-crowned champion
+  to v2 @ 0.9170, a strict improvement over the laptop's v1 0.9157) → arm64 QEMU build
   pushed digest `sha256:400a4873…` → `update-function-code` + `wait
   function-updated` → smoke test confirmed live `/model-info.model_sha256` ==
   freshly built onnx → `mlflow_sync.sh push`. LEARNING.md entry written (OIDC
@@ -346,7 +360,10 @@ metric-diff summary (stdout + `$GITHUB_STEP_SUMMARY`) + exit 1. **Deploy and
 re-crown decoupled:** the `champion` alias moves only on a strict improvement, so
 champion = best-ever quality bar (not "deployed") and the gate baseline can't
 ratchet down (PLAN task 4 amended 2026-07-20). CLI run after `dvc repro`, not a
-DVC stage. 110 tests green, ruff clean. Three paths demoed on throwaway DBs.
+DVC stage. 110 tests green, ruff clean. Three paths demoed on throwaway DBs; the
+block-and-hold path is now also proven live in CI (failing-gate demo 2026-07-20,
+run 29757829275 — a 0.5049 challenger rejected on floor + regression, deploy
+skipped, champion held).
 
 **Phase 2 task 5 (train-deploy workflow) is merged and proven in production**
 (PR #13, 2026-07-20, CI green): `.github/workflows/train-deploy.yml` — fires on
@@ -359,22 +376,24 @@ digest** → smoke test (live `/model-info.model_sha256` == freshly built onnx) 
 dispatch, run 29751206896, 9m24s) — the OIDC assume-role path exercised for the
 first time. **The merge→live path now has zero manual steps** (Phase 2 DoD item met).
 
+**Registry state (as of 2026-07-20):** champion = **v2 @ 0.9170** (the green run's
+CI retrain — a strict improvement over the laptop's v1 0.9157, so it re-crowned);
+**v3** is the blocked crippled challenger from the failing-gate demo. By design no
+alias tracks "deployed" — the live Lambda image is the source of truth for that.
+
 ## Immediate next step (rolling — keep this precise)
 
-Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Tasks 1–5 are done: **the
-merge→live path is proven** (train-deploy ran green 2026-07-20, run 29751206896).
-Remaining Phase 2 work, in order:
+Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Tasks 1–5 are done, **the
+merge→live path is proven** (run 29751206896), and **the failing-gate DoD is met**
+(bad model blocked, run 29757829275). Remaining Phase 2 work, in order:
 
-1. **Failing-gate demo** — a Phase 2 DoD item and, per PLAN, "the best CI/CD story."
-   On a branch, cripple the model (slash the lr or epochs in `params.yaml`) so the
-   challenger regresses; run train-deploy and watch the gate exit 1 and block every
-   deploy step. Keep the blocked run linked in the evidence hub as evidence.
-2. **Task 6 — evidence hub:** enable GitHub Pages on `mlops` (repo → *Settings →
+1. **Task 6 — evidence hub:** enable GitHub Pages on `mlops` (repo → *Settings →
    Pages → Source: GitHub Actions*); add `mlflow_static_export.py` (runs table +
    metric charts → static HTML) and `evidence-pages.yml`; publish eval report +
-   confusion matrix + CI badges; link/iframe from the portfolio site.
-3. **Task 7 — model card** (`MODEL_CARD.md`, rendered into the evidence hub).
-4. **Re-enable the `main` ruleset** (required PR + `ci.yml` check) via GitHub UI now
+   confusion matrix + CI badges + the linked blocked-gate run (29757829275);
+   link/iframe from the portfolio site.
+2. **Task 7 — model card** (`MODEL_CARD.md`, rendered into the evidence hub).
+3. **Re-enable the `main` ruleset** (required PR + `ci.yml` check) via GitHub UI now
    that CI is worth enforcing.
 
 Watch items: EKS-on-free-plan question parked until Phase 3 Task 0; several actions
