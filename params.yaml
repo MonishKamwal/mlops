@@ -37,8 +37,9 @@ training:
 
 # Quality gate (PLAN.md §5 Phase 2 task 4): a freshly trained challenger ships only
 # if it clears an absolute test-accuracy floor AND does not regress on the current
-# champion by more than `epsilon`. The `champion` alias always names the deployed
-# model, so whatever passes the gate is promoted to champion before deploy.
+# champion by more than `epsilon`. Passing means "ship this challenger"; the `champion`
+# alias moves only on a *strict* improvement, so it stays a non-eroding quality bar
+# rather than a record of what's deployed (PLAN §5 task 4, amended 2026-07-20).
 gate:
   min_test_accuracy: 0.85 # absolute floor — "good", not just "better than a bad champion"
   epsilon: 0.005 # 0.5pp of tolerated regression, so seed noise doesn't block deploys
