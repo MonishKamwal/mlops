@@ -8,6 +8,11 @@ output "gha_app_role_arn" {
   value       = aws_iam_role.gha_app.arn
 }
 
+output "gha_eks_role_arn" {
+  description = "Set as the GHA_EKS_ROLE_ARN repo variable (ephemeral EKS lifecycle)."
+  value       = aws_iam_role.gha_eks.arn
+}
+
 output "data_bucket" {
   description = "DVC remote + MLflow state bucket."
   value       = aws_s3_bucket.data.bucket

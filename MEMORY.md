@@ -62,6 +62,21 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-21 (personal laptop, night, later²)** — **Phase 3 task 3 (eks-demo workflow) +
+  the `gha-eks` IAM role built** (branch `phase3-eks-demo`). Prereq surfaced: `gha-app` has
+  only S3/ECR/Lambda perms and can't create EKS, so added a **separate `gha-eks` role**
+  (`infra/persistent/iam.tf`) for the ephemeral lifecycle: region-scoped `ec2/eks/elb/
+  autoscaling/logs:*` (persistent has no EC2/EKS in-region to collide with) + IAM **bounded
+  to `role/quickdraw-ephemeral*`** (so "can create IAM roles" can't escalate to admin) +
+  oidc-provider/service-linked roles + the ephemeral tfstate prefix + `lambda:GetFunction`.
+  Disabled EKS KMS encryption (`encryption_config = null`, since the module gates on
+  `!= null`) to avoid pending-deletion key buildup and kms perms. `eks-demo.yml` (monthly
+  cron + dispatch, `environment: eks-demo` approval gate, `concurrency`): OIDC → tf apply →
+  resolve the digest the Lambda serves (`lambda get-function`) → `helm install` **by digest**
+  → smoke (port-forward) → k6 (20 VU/3 min, HTML report) → capture kubectl evidence (artifact)
+  → **`if: always()` tf destroy**. k6 script `deploy/k6/predict.js`. `fmt` + `validate` (both
+  roots) + workflow YAML all green; **not applied** — blocked on 3 Monish admin steps (see
+  next step) and Task 4 existing first.
 - **2026-07-21 (personal laptop, night, later)** — **Phase 3 task 2 (Helm chart) built**
   (branch `phase3-helm-chart`): `deploy/helm/quickdraw-api` — Deployment (image **by
   digest**, `required` so a mutable tag can't sneak in), `/healthz` startup+liveness+
@@ -497,12 +512,19 @@ pending): Deployment (image by digest, `required`), `/healthz` startup+liveness+
 probes, resources, ClusterIP Service (LB toggle documented/off), optional HPA, and a
 `serviceMonitor` toggle for task 5; `helm lint` + `helm template` (all value paths) clean.
 
-Next, in order:
+**Task 3 (eks-demo workflow + `gha-eks` IAM role) built** (branch `phase3-eks-demo`, PR
+pending). Next, in order:
 
-1. **Task 3 — `eks-demo.yml`** (**MONTHLY** cron + `workflow_dispatch`): apply → helm
-   install the live image → smoke → k6 → capture evidence → **`if: always()` destroy**.
+1. **Monish (admin), once the PR merges — 3 steps to make eks-demo runnable:**
+   (a) `terraform apply` in `infra/persistent` to create the `gha-eks` role (1 add);
+   (b) add repo variable `GHA_EKS_ROLE_ARN` = `terraform output -raw gha_eks_role_arn`;
+   (c) create a GitHub **Environment `eks-demo`** with himself as a required reviewer —
+   the approval gate so no cluster spins up (spending credits) without a human click.
 2. **Task 4 — `eks-failsafe.yml`** (scheduled unconditional destroy + boto3 tag sweeper).
-   **Guardrail: do NOT `terraform apply` the cluster for real until Tasks 3 + 4 exist.**
+   **Guardrail: do NOT run eks-demo for real until Task 4 exists.** Then the FIRST real
+   `terraform apply` is a *dispatched* eks-demo run — watch OIDC → apply → helm → smoke →
+   k6 → destroy, and confirm the account is clean afterward (this also proves the gha-eks
+   policy is complete; a missing IAM action shows up as an apply AccessDenied).
 3. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
    dashboards-as-code).
 
