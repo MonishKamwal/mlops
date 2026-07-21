@@ -9,13 +9,21 @@
 name: Train & Deploy
 
 on:
-  # Only model-affecting changes redeploy — docs/test-only merges don't retrain.
-  # Editing this workflow doesn't match these paths, so it won't fire on its own
-  # merge: the first run is a deliberate manual dispatch (safe OIDC smoke test).
+  # Only model-affecting changes redeploy — docs/tooling/evidence merges don't retrain.
+  # These are the model's real inputs (config + data/training code, serving image,
+  # pipeline, hyperparams, deps). A blanket `src/quickdraw/**` used to also match the
+  # evidence hub (src/quickdraw/evidence/**) and anything else added to the package, so
+  # unrelated merges kicked off an ~8-min build + Lambda redeploy + a throwaway registry
+  # version — enumerate the real inputs instead. Editing this workflow doesn't match
+  # these paths, so it won't fire on its own merge: the first run is a deliberate manual
+  # dispatch (safe OIDC smoke test).
   push:
     branches: [main]
     paths:
-      - src/quickdraw/**
+      - src/quickdraw/config.py
+      - src/quickdraw/data/**
+      - src/quickdraw/training/**
+      - src/quickdraw/serving/**
       - dvc.yaml
       - dvc.lock
       - params.yaml
