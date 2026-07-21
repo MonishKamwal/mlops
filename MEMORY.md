@@ -15,9 +15,12 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 - **The AWS account is on the post-July-2025 free plan.** Created ~July 2026 → plan ends
   ~Jan 2027 or when credits run out, whichever is first. $100 credits + up to $100 earnable.
-  The account *cannot incur charges*; some credit-hungry services are blocked (EKS likely
-  among them — unverified). A direct upgrade to paid carries remaining credits over
-  (upgrading via Organizations/Control Tower would forfeit them).
+  The account *cannot incur charges*. **EKS is NOT blocked on the free plan** — verified
+  2026-07-21 by creating a cluster (control-plane only, since deleted); so Phase 3 needs
+  no upgrade to paid. EKS still *draws down credits* though (~$0.10/hr control plane +
+  nodes + NAT), so the ephemeral teardown discipline is the real guardrail. (A direct
+  upgrade to paid would carry remaining credits over; via Organizations/Control Tower it
+  would forfeit them — moot unless we ever upgrade.)
 - AWS Budgets ($10 / $25 / $50, email alerts) exist — created via Console 2026-07-03. The
   CloudWatch billing alarm is deliberately **deferred**: a free-plan account bills $0 by
   construction. It becomes mandatory the day the account upgrades to paid (PLAN.md
@@ -59,6 +62,20 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-21 (personal laptop, night)** — **Phase 3 kicked off: Task 0 gate cleared +
+  Task 1 (`infra/ephemeral`) built.** Task 0: created a test EKS cluster via the console →
+  **EKS is NOT blocked on the free plan**, so no paid upgrade needed; deleted the cluster +
+  a stray unassociated EIP and swept the account clean (no EKS/EC2/NAT/ELB/EIP). Task 1
+  (branch `phase3-ephemeral-infra`): a second Terraform root mirroring `infra/persistent`
+  conventions — S3 backend key `ephemeral/terraform.tfstate` (physically separate from
+  persistent state), AWS provider `~> 6.0`, `tier=ephemeral` default tags for the failsafe
+  sweeper; `terraform-aws-modules/vpc ~> 6.0` (2 AZ, single NAT) + `terraform-aws-modules/eks
+  ~> 21.0` (K8s 1.33, one managed node group 2× t3.medium SPOT, `endpoint_public_access` for
+  CI kubectl, `enable_cluster_creator_admin_permissions` → CI role gets an admin access
+  entry). Pinned EKS v21 (first major to support AWS provider 6) after checking the registry.
+  `init -backend=false` + `fmt` + `validate` all green locally — **not applied** (gated on
+  Tasks 3+4 teardown existing). Cadence: **monthly** cron (not weekly) + on-demand dispatch,
+  to conserve credits.
 - **2026-07-21 (personal laptop, evening, later)** — **Phase 2 closed.** Task 7 merged
   (PR #18) → model card live on the hub; the `main` ruleset re-enabled (new active
   ruleset `branch-protection`: require PR + block deletion/force-push; no signed
@@ -457,24 +474,31 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phase 2 is complete.** Begin **Phase 3 — ephemeral EKS** (PLAN.md §5 Phase 3), but
-**Task 0 first (account-plan gate):** check the EKS console — if the post-July-2025
-free-plan account blocks EKS, upgrade to the paid plan (a direct upgrade carries the
-remaining credits over) and add the deferred CloudWatch billing alarm *before* creating
-any ephemeral infra (that's when real charges become possible). Only then: `infra/ephemeral/`
-(VPC + EKS spot node group), the `quickdraw-api` Helm chart, and the weekly `eks-demo.yml`
-spin-up → smoke/k6 → **`if: always()` destroy**.
+**Phase 2 complete; Phase 3 (ephemeral EKS) underway.** Task 0 resolved 2026-07-21: EKS
+runs on the free plan (no upgrade needed); the test cluster + a stray EIP were cleaned up
+→ account at zero billable EKS/EC2/NAT/ELB/EIP. **Task 1 (`infra/ephemeral`) built**
+(branch `phase3-ephemeral-infra`, PR pending): second Terraform root (state key
+`ephemeral/terraform.tfstate`), VPC module `~> 6.0` (2 AZ, single NAT) + EKS module
+`~> 21.0` (K8s 1.33, one managed node group **2× t3.medium SPOT**, public endpoint for CI
+kubectl, cluster-creator admin access entry); `init -backend=false` + `validate` pass
+locally. **NOT applied** — by design, apply waits until the teardown path exists.
 
-Smaller tail items (anytime):
+Next, in order:
 
-1. **Finish the ruleset:** add the `test` (ci.yml) required status check to the active
-   `branch-protection` ruleset so a red-CI PR can't merge (Monish; GitHub UI).
-2. **Portfolio evidence section:** style it by consuming `evidence.json` (the data
-   contract) — Phase 2 tail / Phase 4 lead-in.
+1. **Task 2 — Helm chart** `deploy/helm/quickdraw-api` (Deployment from ECR by digest,
+   `/healthz` probes, Service, optional HPA).
+2. **Task 3 — `eks-demo.yml`** (**MONTHLY** cron + `workflow_dispatch`): apply → helm
+   install the live image → smoke → k6 → capture evidence → **`if: always()` destroy**.
+3. **Task 4 — `eks-failsafe.yml`** (scheduled unconditional destroy + boto3 tag sweeper).
+   **Guardrail: do NOT `terraform apply` the cluster for real until Tasks 3 + 4 exist.**
+4. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
+   dashboards-as-code).
+
+Tail item (anytime): style the portfolio site's evidence section by consuming
+`evidence.json` (the data contract).
 
 Watch items: the evidence hub's confusion-matrix PNG is a laptop-era artifact (v1 @
-0.9157) while headline metrics come from the registry (v2 @ 0.9170) — a later
-refinement could regenerate it from the champion; EKS-on-free-plan question parked
-until Phase 3 Task 0; several actions in the workflows still target Node 20 (GitHub
-forces Node 24 — bump majors when convenient); markdownlint nits in PLAN.md are known
-and not CI-checked.
+0.9157) while headline metrics come from the registry (now ~v6, champion still v2 @
+0.9170) — a later refinement could regenerate it from the champion; several actions in
+the workflows still target Node 20 (GitHub forces Node 24 — bump majors when convenient);
+markdownlint nits in PLAN.md are known and not CI-checked.

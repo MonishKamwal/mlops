@@ -1,0 +1,34 @@
+# EKS module v21 (the first major to support AWS provider 6). Nodes run in the private
+# subnets; one managed node group on SPOT instances — the demo tolerates interruption,
+# and spot is a large cost saving on an already credit-funded account.
+#
+# endpoint_public_access = true so the GitHub Actions runner (outside the VPC) can reach
+# the API server to run kubectl/helm. The cluster is short-lived and auth still gates
+# every call (access entries below), so a public endpoint is an acceptable demo trade.
+#
+# enable_cluster_creator_admin_permissions = true grants the identity that runs
+# `terraform apply` (in CI, the gha-app role) cluster-admin via an EKS access entry —
+# so the same workflow can immediately helm-install and kubectl without extra RBAC glue.
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "~> 21.0"
+
+  name               = var.cluster_name
+  kubernetes_version = var.kubernetes_version
+
+  endpoint_public_access                   = true
+  enable_cluster_creator_admin_permissions = true
+
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = module.vpc.private_subnets
+
+  eks_managed_node_groups = {
+    default = {
+      instance_types = var.node_instance_types
+      capacity_type  = "SPOT"
+      min_size       = var.node_min_size
+      max_size       = var.node_max_size
+      desired_size   = var.node_desired_size
+    }
+  }
+}
