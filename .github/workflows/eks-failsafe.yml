@@ -1,0 +1,61 @@
+# Ephemeral EKS failsafe (PLAN.md §5 Phase 3, task 4).
+#
+# The break-glass backstop: unconditionally destroy the ephemeral Terraform state, then
+# sweep for any `tier=ephemeral` resources that survived (a failed destroy, lost state, a
+# cancelled demo run). Runs ~3h after the monthly eks-demo window and is dispatchable any
+# time. Unlike eks-demo it has NO environment/approval gate — it must be able to run and
+# clean up without a human in the loop.
+name: EKS failsafe
+
+on:
+  schedule:
+    - cron: "0 9 1 * *" # 09:00 UTC on the 1st — ~3h after the eks-demo window
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# Shared group with eks-demo: the two can never overlap, so a scheduled failsafe queued
+# while a demo is mid-run waits it out instead of destroying the cluster under test.
+concurrency:
+  group: eks-cluster
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  TF_DIR: infra/ephemeral
+
+jobs:
+  failsafe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.7"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.GHA_EKS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Primary teardown: destroy whatever the ephemeral state still tracks. Best-effort
+      # (an empty state destroys nothing) and continue-on-error so the sweep runs even if
+      # destroy is blocked by a locked/corrupt state.
+      - name: Terraform destroy (best-effort)
+        working-directory: ${{ env.TF_DIR }}
+        continue-on-error: true
+        run: |
+          terraform init -input=false
+          terraform destroy -auto-approve -input=false
+
+      # Backstop: delete anything tier=ephemeral that survived (leaked / not in state).
+      # Exits non-zero (fails the run) if any deletion errors, so a real leak is visible.
+      - name: Sweep leaked resources
+        run: |
+          pip install --quiet boto3
+          python scripts/eks_sweep.py --region "$AWS_REGION"
