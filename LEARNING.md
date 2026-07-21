@@ -4,6 +4,20 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-21 — Path filters are file-level: broad globs couple unrelated work to expensive jobs
+
+- A `paths: [src/quickdraw/**]` trigger on the train→deploy workflow meant that adding an
+  *evidence-hub* module under `src/quickdraw/evidence/` retrained the model and redeployed
+  the Lambda — an ~8-min build for a change that can't touch the model. Path filters match
+  file locations, not intent; a glob that's convenient today silently widens every time the
+  package grows a subpackage with a different purpose.
+- The gate contained the blast radius — each unintended challenger shipped within-ε and never
+  re-crowned, so champion held — but "nothing broke" isn't "nothing happened": the registry
+  collected throwaway versions (v4, v5) and the Lambda was redeployed for free. The fix is to
+  enumerate the job's *real* inputs (`config.py`, `data/**`, `training/**`, `serving/**`,
+  pipeline, params, deps) instead of globbing a whole package — which also makes reality match
+  the trigger's own comment, "only model-affecting changes redeploy."
+
 ## 2026-07-21 — The evidence hub: publish from the registry, split data from styling
 
 - **Publish from the source of truth, not a checked-in snapshot.** The git-tracked

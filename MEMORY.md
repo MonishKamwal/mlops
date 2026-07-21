@@ -59,6 +59,19 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-21 (personal laptop, later)** — **Task 6 shipped live + narrowed
+  train-deploy's path filter.** Enabling Pages + a dispatch published the hub at
+  monishkamwal.github.io/mlops/ (index.html + evidence.json both serving); the
+  `workflow_run` auto-refresh then proved itself — v5's deploy re-rendered the hub with
+  no manual step (evidence-pages run 29836201467). **But merging PRs #15 (params.yaml
+  comment) and #16 (evidence module + uv.lock) each tripped a full train-deploy** — the
+  blanket `src/quickdraw/**` matched the new `evidence/` package, and doc-adjacent files
+  sit in the filter — spending an ~8-min arm64 build + Lambda redeploy + a new registry
+  version (v4 0.9153, v5 0.9170) each. All within-ε so the gate held (champion v2 @
+  0.9170 unmoved), but wasteful and churny. Fix (branch `fix-train-deploy-paths`, PR
+  pending): replaced `src/quickdraw/**` with the model's real inputs (`config.py`,
+  `data/**`, `training/**`, `serving/**`), so evidence/monitoring/doc changes no longer
+  retrain.
 - **2026-07-21 (personal laptop)** — **Phase 2 task 6 (evidence hub) built** (branch
   `phase2-evidence-hub`, PR pending): `src/quickdraw/evidence/export.py` renders a
   static site **from the MLflow registry** — the source of truth for champion state,
@@ -396,10 +409,12 @@ digest** → smoke test (live `/model-info.model_sha256` == freshly built onnx) 
 dispatch, run 29751206896, 9m24s) — the OIDC assume-role path exercised for the
 first time. **The merge→live path now has zero manual steps** (Phase 2 DoD item met).
 
-**Registry state (as of 2026-07-20):** champion = **v2 @ 0.9170** (the green run's
-CI retrain — a strict improvement over the laptop's v1 0.9157, so it re-crowned);
-**v3** is the blocked crippled challenger from the failing-gate demo. By design no
-alias tracks "deployed" — the live Lambda image is the source of truth for that.
+**Registry state (as of 2026-07-21):** champion = **v2 @ 0.9170** — still the quality
+bar; no later challenger has *strictly* beaten it. v1 0.9157 (laptop), v3 0.5049
+(blocked crippled demo), and v4 0.9153 / v5 0.9170 (challengers that shipped within-ε
+from the PR #15 / #16 merges, before the path-filter fix below). Live Lambda serves the
+newest shipped challenger (**v5**); by design no alias tracks "deployed" — the built
+image is the source of truth for that.
 
 **Phase 2 task 6 (evidence hub) is built** (branch `phase2-evidence-hub`, PR
 pending): `quickdraw.evidence.export` renders the hub from the MLflow registry and
