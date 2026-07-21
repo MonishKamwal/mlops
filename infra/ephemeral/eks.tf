@@ -27,8 +27,11 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
+  # The node-group key becomes its name, and the module derives the node IAM role from it
+  # (`<name>-eks-node-group-*`). Prefixing the key with the cluster name keeps that role
+  # under `quickdraw-ephemeral*`, which is exactly what the gha-eks IAM policy is scoped to.
   eks_managed_node_groups = {
-    default = {
+    "${var.cluster_name}-ng" = {
       instance_types = var.node_instance_types
       capacity_type  = "SPOT"
       min_size       = var.node_min_size
