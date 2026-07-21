@@ -317,10 +317,10 @@ a *failing* gate (train with crippled lr on a branch) — a blocked deploy is th
 negligible).
 
 **Definition of done:**
-- [ ] Fresh clone + `dvc pull && dvc repro` reproduces the pipeline byte-for-byte (modulo training seed noise)
-- [ ] Merge to `main` with a model-affecting change auto-deploys a gated model with zero manual steps
-- [ ] A deliberately bad model is demonstrably blocked by the gate (kept as a linked CI run in evidence)
-- [ ] Evidence hub live with MLflow export + eval report; linked from portfolio site
+- [x] Fresh clone + `dvc pull && dvc repro` reproduces the pipeline byte-for-byte (modulo training seed noise) — CI runs exactly this on every train-deploy
+- [x] Merge to `main` with a model-affecting change auto-deploys a gated model with zero manual steps (proven: run 29751206896 → v2, and every model-affecting merge since)
+- [x] A deliberately bad model is demonstrably blocked by the gate (linked CI run 29757829275)
+- [~] Evidence hub live with MLflow export + eval report — **live at `monishkamwal.github.io/mlops/`**; *linked from portfolio site* is the one remaining tail item
 
 ---
 
