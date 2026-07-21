@@ -4,6 +4,19 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-21 — Module constants as default args aren't monkeypatchable
+
+- `def load_x(path: Path = MODULE_CONST)` captures `MODULE_CONST`'s *value* at function
+  definition (import) time, not per call. So a test that does
+  `monkeypatch.setattr(module, "MODULE_CONST", tmp)` and then calls `load_x()` still reads
+  the original path — the default was frozen at import. It bit the model-card tests (they
+  kept reading the real `MODEL_CARD.md` instead of a temp one) and had been quietly masking
+  a stale read in an eval-metrics test that simply never asserted on the patched content.
+- Fix: default the parameter to `None` and resolve the constant inside the body
+  (`path = path or MODULE_CONST`), so the lookup happens at call time and the constant stays
+  patchable. Rule of thumb: if a module constant is meant to be overridable — by tests or
+  callers — read it in the body, not in the signature.
+
 ## 2026-07-21 — Path filters are file-level: broad globs couple unrelated work to expensive jobs
 
 - A `paths: [src/quickdraw/**]` trigger on the train→deploy workflow meant that adding an

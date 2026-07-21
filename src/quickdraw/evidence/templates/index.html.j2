@@ -139,6 +139,13 @@
       </div>
     </section>
     {% endif %}
+
+    {% if model_card_html %}
+    <section class="model-card">
+      <h2>Model card <a class="src" href="MODEL_CARD.md">source&nbsp;&rarr;</a></h2>
+      <div class="prose">{{ model_card_html|safe }}</div>
+    </section>
+    {% endif %}
   </main>
 
   <footer>

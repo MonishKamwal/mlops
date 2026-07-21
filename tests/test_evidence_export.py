@@ -118,6 +118,7 @@ def test_render_writes_self_contained_site(
     cm.write_bytes(b"\x89PNG\r\n")
     monkeypatch.setattr(export, "EVAL_METRICS_PATH", metrics)
     monkeypatch.setattr(export, "CONFUSION_MATRIX_PATH", cm)
+    monkeypatch.setattr(export, "MODEL_CARD_PATH", tmp_path / "absent.md")  # card-free path
 
     _train_run(tracking_uri, epochs=8, lr=0.001, val=0.92, test=0.93)
 
@@ -137,3 +138,44 @@ def test_render_writes_self_contained_site(
     data = json.loads((out / "evidence.json").read_text())
     assert data["champion"]["version"] == "1"
     assert data["gate"]["min_test_accuracy"] == 0.85
+
+
+def test_load_model_card_html_renders_markdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = tmp_path / "MODEL_CARD.md"
+    card.write_text("# Title\n\n| a | b |\n|---|---|\n| 1 | 2 |\n")
+    monkeypatch.setattr(export, "MODEL_CARD_PATH", card)
+
+    html = export.load_model_card_html()
+
+    assert "<h1>Title</h1>" in html
+    assert "<table>" in html  # the `tables` extension is active
+
+
+def test_load_model_card_html_absent_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(export, "MODEL_CARD_PATH", tmp_path / "nope.md")
+    assert export.load_model_card_html() is None
+
+
+def test_render_includes_model_card_and_copies_source(
+    tracking_uri: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = tmp_path / "MODEL_CARD.md"
+    card.write_text("# Model card — QuickDraw\n\nSome **prose**.\n")
+    monkeypatch.setattr(export, "MODEL_CARD_PATH", card)
+    monkeypatch.setattr(export, "EVAL_METRICS_PATH", tmp_path / "no-metrics.json")
+    monkeypatch.setattr(export, "CONFUSION_MATRIX_PATH", tmp_path / "no-cm.png")
+
+    _train_run(tracking_uri, epochs=8, lr=0.001, val=0.92, test=0.93)
+
+    out = tmp_path / "site"
+    html = export.render(out, tracking_uri=tracking_uri, gate_params=GATE).read_text()
+
+    assert 'class="model-card"' in html
+    assert "<strong>prose</strong>" in html  # markdown rendered into the page
+    assert (out / "MODEL_CARD.md").exists()  # raw source shipped for the portfolio
+    # the rendered card is presentation, never part of the JSON data contract
+    assert "model_card_html" not in json.loads((out / "evidence.json").read_text())

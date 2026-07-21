@@ -300,6 +300,11 @@ that can say no. Evidence hub goes live.
    > and `build_context()` (data + presentation) keep the two concerns separate.
 7. Add model card (`MODEL_CARD.md`, rendered into evidence).
 
+   > **Amended 2026-07-21:** `MODEL_CARD.md` lives at the repo root and is rendered into the
+   > hub as a section (Python-Markdown) by `quickdraw.evidence.export`, with the raw `.md`
+   > copied to the site so the portfolio can consume the source. Its headline metrics are a
+   > reference point; the hub's registry-fed numbers are authoritative.
+
 **Tools introduced:** DVC, Pandera, MLflow registry semantics, GitHub OIDC deploy path,
 evidence pipeline.
 
