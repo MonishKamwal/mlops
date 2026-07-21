@@ -1,0 +1,129 @@
+# Ephemeral EKS demo (PLAN.md §5 Phase 3, task 3).
+#
+# Once a month (and on demand) this stands up a real EKS cluster, deploys the exact image
+# the Lambda tier is serving, smoke- and load-tests it, captures evidence, and DESTROYS
+# everything — the whole point is ~$0 idle cost. The destroy step is `if: always()` so a
+# failure still tears down; the separate eks-failsafe.yml (task 4) is the backstop for a
+# cancelled run or a dead runner.
+name: EKS demo
+
+on:
+  schedule:
+    - cron: "0 6 1 * *" # 06:00 UTC on the 1st of each month (monthly, to conserve credits)
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC assume-role for the ephemeral EKS role
+  contents: read
+
+# Never let two cluster runs overlap; queue rather than cancel (a cancelled apply/destroy
+# could leave resources behind — the failsafe would catch it, but don't invite it).
+concurrency:
+  group: eks-demo
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  TF_DIR: infra/ephemeral
+  CLUSTER_NAME: quickdraw-ephemeral
+  LAMBDA_FUNCTION_NAME: quickdraw-api
+  RELEASE: quickdraw-api
+  NAMESPACE: quickdraw
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    # The approval gate: configure the `eks-demo` environment with a required reviewer so
+    # a cluster can never spin up (and spend credits) without a human clicking approve.
+    environment: eks-demo
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.7"
+
+      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+      - uses: grafana/setup-k6-action@v1
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.GHA_EKS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform apply (ephemeral cluster)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Resolve the live image digest (what the Lambda tier serves)
+        id: image
+        run: |
+          set -euo pipefail
+          uri=$(aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" \
+            --query 'Code.ImageUri' --output text)
+          echo "digest=${uri##*@}" >> "$GITHUB_OUTPUT"
+          echo "Deploying image digest ${uri##*@}"
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install "$RELEASE" deploy/helm/quickdraw-api \
+            --namespace "$NAMESPACE" --create-namespace \
+            --set fullnameOverride="$RELEASE" \
+            --set image.digest=${{ steps.image.outputs.digest }} \
+            --wait --timeout 5m
+
+      - name: Smoke test (via port-forward)
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" port-forward "svc/$RELEASE" 8080:80 >/dev/null 2>&1 &
+          pf=$!
+          trap 'kill $pf' EXIT
+          for i in $(seq 1 15); do curl -fsS localhost:8080/healthz && break || sleep 3; done
+          expected=$(curl -fsS localhost:8080/model-info | jq -r .model_sha256)
+          echo "in-cluster model sha256: $expected"
+          test -n "$expected"
+
+      - name: k6 load test (via port-forward)
+        run: |
+          set -euo pipefail
+          mkdir -p eks-evidence
+          kubectl -n "$NAMESPACE" port-forward "svc/$RELEASE" 8080:80 >/dev/null 2>&1 &
+          pf=$!
+          trap 'kill $pf' EXIT
+          sleep 5
+          K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=eks-evidence/k6-report.html \
+            k6 run deploy/k6/predict.js -e TARGET=http://localhost:8080
+
+      - name: Capture cluster evidence
+        if: always()
+        run: |
+          mkdir -p eks-evidence
+          kubectl get all -A -o wide > eks-evidence/resources.txt 2>&1 || true
+          kubectl -n "$NAMESPACE" rollout history "deploy/$RELEASE" > eks-evidence/rollout.txt 2>&1 || true
+          kubectl top nodes > eks-evidence/top-nodes.txt 2>&1 || true
+          kubectl top pods -n "$NAMESPACE" > eks-evidence/top-pods.txt 2>&1 || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eks-demo-evidence
+          path: eks-evidence/
+          if-no-files-found: warn
+
+      - name: Terraform destroy
+        if: always()
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false
+          terraform destroy -auto-approve -input=false

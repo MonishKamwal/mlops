@@ -19,6 +19,11 @@ module "eks" {
   endpoint_public_access                   = true
   enable_cluster_creator_admin_permissions = true
 
+  # No envelope encryption / KMS key: the ephemeral demo holds no real secrets, and a
+  # per-run KMS key would linger in pending-deletion (7-30d) after every destroy. Setting
+  # this to null (not {}) is what disables it — the module gates on `encryption_config != null`.
+  encryption_config = null
+
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
