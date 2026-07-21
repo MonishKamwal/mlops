@@ -1,0 +1,57 @@
+# Deploy BY DIGEST, never a tag: the demo workflow passes the exact image the Lambda
+# tier is serving (`--set image.digest=sha256:...`), so EKS runs the identical artifact.
+# image.digest has no default on purpose — the Deployment `required`s it at render time.
+image:
+  repository: 152439497402.dkr.ecr.us-east-2.amazonaws.com/quickdraw-api
+  digest: "" # e.g. sha256:400a4873...
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# The container serves FastAPI/uvicorn on 8080 (same port as the Lambda image).
+containerPort: 8080
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+service:
+  # ClusterIP for the weekly run (smoke/k6 go through `kubectl port-forward`).
+  # LoadBalancer is supported and documented, but unused — it would provision an ELB
+  # (extra cost + teardown surface) the ephemeral demo doesn't need.
+  type: ClusterIP
+  port: 80
+
+# Probes hit /healthz. The model loads in the app's lifespan, so a generous startupProbe
+# covers the cold start (up to ~60s) before liveness/readiness take over — otherwise
+# liveness could kill a pod that's still loading the ONNX model.
+probes:
+  path: /healthz
+  startup:
+    failureThreshold: 30
+    periodSeconds: 2
+  liveness:
+    periodSeconds: 10
+  readiness:
+    periodSeconds: 10
+
+# Optional HPA (off by default; the demo can flip it on to show autoscaling under k6).
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# Prometheus scrape config for kube-prometheus-stack (Phase 3 task 5). Off until the
+# Prometheus operator + its CRDs are installed in the demo run, then flipped on.
+serviceMonitor:
+  enabled: false
+  interval: 15s
+
+# Extra env for the container, e.g. [{name: PREDICTION_LOG_BUCKET, value: ...}].
+# Empty for the demo: prediction logging needs S3/IRSA and isn't part of the EKS story.
+env: []

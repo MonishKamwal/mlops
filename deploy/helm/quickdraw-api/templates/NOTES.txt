@@ -1,0 +1,9 @@
+{{ .Chart.Name }} is deployed as {{ include "quickdraw-api.fullname" . }}
+  image:    {{ .Values.image.repository }}@{{ .Values.image.digest }}
+  replicas: {{ if .Values.autoscaling.enabled }}{{ .Values.autoscaling.minReplicas }}–{{ .Values.autoscaling.maxReplicas }} (HPA){{ else }}{{ .Values.replicaCount }}{{ end }}
+  service:  {{ include "quickdraw-api.fullname" . }} ({{ .Values.service.type }}:{{ .Values.service.port }})
+
+Smoke-test it (the weekly run does this over kubectl port-forward):
+  kubectl port-forward svc/{{ include "quickdraw-api.fullname" . }} 8080:{{ .Values.service.port }}
+  curl -s localhost:8080/healthz
+  curl -s localhost:8080/model-info | jq .model_sha256

@@ -62,6 +62,16 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-21 (personal laptop, night, later)** — **Phase 3 task 2 (Helm chart) built**
+  (branch `phase3-helm-chart`): `deploy/helm/quickdraw-api` — Deployment (image **by
+  digest**, `required` so a mutable tag can't sneak in), `/healthz` startup+liveness+
+  readiness probes (a generous startupProbe covers the ONNX-load cold start so liveness
+  won't kill a still-loading pod), CPU/mem requests+limits, ClusterIP Service (LoadBalancer
+  documented but off — no ELB cost/teardown surface), optional HPA, and a
+  `serviceMonitor.enabled` toggle for the task-5 Prometheus scrape. Same image as the Lambda
+  tier (Lambda Web Adapter is inert without the Lambda runtime API). Validated locally with
+  `helm lint` (clean) + `helm template` across all value paths (default → Deployment+Service;
+  HPA-on and ServiceMonitor-on render those too). Not deployed — waits for the cluster.
 - **2026-07-21 (personal laptop, night)** — **Phase 3 kicked off: Task 0 gate cleared +
   Task 1 (`infra/ephemeral`) built.** Task 0: created a test EKS cluster via the console →
   **EKS is NOT blocked on the free plan**, so no paid upgrade needed; deleted the cluster +
@@ -482,16 +492,18 @@ runs on the free plan (no upgrade needed); the test cluster + a stray EIP were c
 `~> 21.0` (K8s 1.33, one managed node group **2× t3.medium SPOT**, public endpoint for CI
 kubectl, cluster-creator admin access entry); `init -backend=false` + `validate` pass
 locally. **NOT applied** — by design, apply waits until the teardown path exists.
+**Task 2 (Helm chart `deploy/helm/quickdraw-api`) built** (branch `phase3-helm-chart`, PR
+pending): Deployment (image by digest, `required`), `/healthz` startup+liveness+readiness
+probes, resources, ClusterIP Service (LB toggle documented/off), optional HPA, and a
+`serviceMonitor` toggle for task 5; `helm lint` + `helm template` (all value paths) clean.
 
 Next, in order:
 
-1. **Task 2 — Helm chart** `deploy/helm/quickdraw-api` (Deployment from ECR by digest,
-   `/healthz` probes, Service, optional HPA).
-2. **Task 3 — `eks-demo.yml`** (**MONTHLY** cron + `workflow_dispatch`): apply → helm
+1. **Task 3 — `eks-demo.yml`** (**MONTHLY** cron + `workflow_dispatch`): apply → helm
    install the live image → smoke → k6 → capture evidence → **`if: always()` destroy**.
-3. **Task 4 — `eks-failsafe.yml`** (scheduled unconditional destroy + boto3 tag sweeper).
+2. **Task 4 — `eks-failsafe.yml`** (scheduled unconditional destroy + boto3 tag sweeper).
    **Guardrail: do NOT `terraform apply` the cluster for real until Tasks 3 + 4 exist.**
-4. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
+3. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
    dashboards-as-code).
 
 Tail item (anytime): style the portfolio site's evidence section by consuming
