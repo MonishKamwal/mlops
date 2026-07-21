@@ -190,6 +190,14 @@ data "aws_iam_policy_document" "gha_eks_permissions" {
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/gha-eks"]
   }
 
+  # The managed node group resolves the EKS-optimized AMI version from AWS's public SSM
+  # parameters (/aws/service/eks/optimized-ami/...) — read-only, and only that path.
+  statement {
+    sid       = "ReadEksOptimizedAmiSsm"
+    actions   = ["ssm:GetParameter", "ssm:GetParameters"]
+    resources = ["arn:aws:ssm:${var.aws_region}::parameter/aws/service/eks/*"]
+  }
+
   # The cluster's IRSA OIDC provider (per-cluster, name not predictable) + the
   # service-linked roles EKS/EC2/autoscaling create — the latter is inherently
   # constrained to AWS service principals.
