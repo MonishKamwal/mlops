@@ -1,0 +1,9 @@
+apiVersion: v2
+name: quickdraw-api
+description: >-
+  The QuickDraw sketch-classifier serving API on Kubernetes. Runs the exact same
+  container image as the Lambda tier (the Lambda Web Adapter is inert without the
+  Lambda runtime API), so EKS and Lambda serve identical bytes.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

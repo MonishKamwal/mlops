@@ -1,0 +1,16 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "quickdraw-api.fullname" . }}
+  labels:
+    {{- include "quickdraw-api.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "quickdraw-api.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
