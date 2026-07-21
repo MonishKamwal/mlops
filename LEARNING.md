@@ -4,6 +4,36 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-21 — The evidence hub: publish from the registry, split data from styling
+
+- **Publish from the source of truth, not a checked-in snapshot.** The git-tracked
+  `reports/eval/metrics.json` is one machine's artifact — it still reads 0.9157 while the
+  registry's champion is v2 @ 0.9170 (a CI retrain that re-crowned). A dashboard that
+  reads the **MLflow registry** for "what's champion and its number" cannot drift out of
+  sync with reality; one that reads the committed file can. So `export.py` gathers runs +
+  aliases from the registry and uses the eval JSON only for supplementary per-class detail.
+- **Separate data from presentation with a JSON contract.** The hub writes `evidence.json`
+  (pure data) next to `index.html` (one default rendering). Anything that wants to
+  restyle — here, the portfolio site later — consumes the JSON and builds its own
+  components; the HTML/CSS in this repo are deliberately throwaway. The mechanism:
+  `build_data()` returns only JSON-serializable content; `build_context()` is that plus
+  presentation-only keys (chart markup, the plotly CDN); `render()` strips those keys back
+  out to produce the JSON — so both artifacts are provably rendered from the same data and
+  can't disagree.
+- **One OIDC permission, two federations.** `id-token: write` is what lets
+  `configure-aws-credentials` mint a token AWS trades for role credentials — *and* what
+  `actions/deploy-pages` uses to authenticate the Pages deploy. The same line does double
+  duty; the Pages half additionally needs `pages: write`. Worth knowing before reaching for
+  a second auth mechanism you don't need.
+- **Read the DB, not the artifacts.** Everything the hub needs — run metrics, versions,
+  aliases — lives in `mlflow.db`, so `mlflow_sync.sh pull` (one file) is the entire data
+  fetch; no S3 artifact download. The confusion-matrix PNG (a DVC out) is the lone extra,
+  pulled best-effort, and the page degrades gracefully when it's absent.
+- **A dep group can be import-visible to tests yet absent from the image.** `evidence`
+  (jinja2, plotly) sits in `default-groups` so `ci.yml`'s pytest can import the module,
+  while the Dockerfile's `--no-default-groups` keeps it out of the serving image — the same
+  lever the `train` group uses: default-for-dev, excluded-for-prod.
+
 ## 2026-07-20 — First OIDC deploy: the merge→live path, proven
 
 - **OIDC is keyless deploy — the credential is minted per run and expires.**

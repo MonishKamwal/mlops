@@ -59,6 +59,26 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-21 (personal laptop)** — **Phase 2 task 6 (evidence hub) built** (branch
+  `phase2-evidence-hub`, PR pending): `src/quickdraw/evidence/export.py` renders a
+  static site **from the MLflow registry** — the source of truth for champion state,
+  not the git-tracked metrics snapshot (which already reads 0.9157 vs the registry's
+  v2 @ 0.9170). Output: champion cards, runs table, plotly charts (per-class F1 +
+  test-accuracy-over-runs), confusion matrix, gate policy with a link to the
+  blocked-gate run, per-class table. **Emits `evidence.json` as a styling-agnostic
+  data contract** (Monish's ask — the portfolio site consumes the JSON, not the
+  throwaway HTML/CSS): `build_data()` is pure JSON, `build_context()` layers
+  presentation on top, and `render()` strips the presentation keys back out so the two
+  never disagree. New `evidence` dep group (jinja2, plotly) in default-groups so
+  ci.yml's pytest can import it; the serving image still excludes it
+  (`--no-default-groups`). `.github/workflows/evidence-pages.yml`: OIDC →
+  `mlflow_sync.sh pull` → best-effort `dvc pull` of the confusion matrix →
+  `export --out _site` → `upload-pages-artifact` → `deploy-pages`; triggers on green
+  train-deploy (`workflow_run`) + push to evidence sources + dispatch (`id-token:
+  write` does double duty — AWS assume-role *and* the Pages deploy). 6 new tests (116
+  total), ruff clean; previewed locally against a throwaway DB mirroring v1/v2/v3.
+  **Pending: Monish enables Pages (UI) + first manual dispatch** → hub goes live at
+  monishkamwal.github.io/mlops/.
 - **2026-07-20 (personal laptop, evening, later)** — **Failing-gate demo: a bad
   model was blocked in CI** (Phase 2 DoD item met). Branch `phase2-failing-gate`
   (never merged) crippled training in `params.yaml` (1 epoch, lr 1e-5); a
@@ -381,22 +401,30 @@ CI retrain — a strict improvement over the laptop's v1 0.9157, so it re-crowne
 **v3** is the blocked crippled challenger from the failing-gate demo. By design no
 alias tracks "deployed" — the live Lambda image is the source of truth for that.
 
+**Phase 2 task 6 (evidence hub) is built** (branch `phase2-evidence-hub`, PR
+pending): `quickdraw.evidence.export` renders the hub from the MLflow registry and
+writes `index.html` + **`evidence.json`** (the styling-agnostic data contract the
+portfolio site consumes) + `style.css` + the confusion matrix; `evidence-pages.yml`
+publishes to GitHub Pages after each green train-deploy. **Not live** until Monish
+enables Pages (UI) and dispatches the first run.
+
 ## Immediate next step (rolling — keep this precise)
 
-Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Tasks 1–5 are done, **the
-merge→live path is proven** (run 29751206896), and **the failing-gate DoD is met**
-(bad model blocked, run 29757829275). Remaining Phase 2 work, in order:
+Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Tasks 1–5 done; task 6
+(evidence hub) is **built on `phase2-evidence-hub`** (PR pending). Remaining:
 
-1. **Task 6 — evidence hub:** enable GitHub Pages on `mlops` (repo → *Settings →
-   Pages → Source: GitHub Actions*); add `mlflow_static_export.py` (runs table +
-   metric charts → static HTML) and `evidence-pages.yml`; publish eval report +
-   confusion matrix + CI badges + the linked blocked-gate run (29757829275);
-   link/iframe from the portfolio site.
+1. **Finish task 6 — take it live:** merge the PR, then Monish enables Pages (repo →
+   *Settings → Pages → Source: GitHub Actions*) and dispatches once (*Actions →
+   Evidence hub → Run workflow*, on main). Hub lands at monishkamwal.github.io/mlops/.
+   Later: style the portfolio site's evidence section by consuming `evidence.json`
+   (the data contract) — not the throwaway hub HTML/CSS.
 2. **Task 7 — model card** (`MODEL_CARD.md`, rendered into the evidence hub).
 3. **Re-enable the `main` ruleset** (required PR + `ci.yml` check) via GitHub UI now
    that CI is worth enforcing.
 
-Watch items: EKS-on-free-plan question parked until Phase 3 Task 0; several actions
-in `train-deploy.yml` still target Node 20 (GitHub is forcing them onto Node 24 —
-bump the action majors when convenient); markdownlint style nits in PLAN.md are
-known and not CI-checked.
+Watch items: the evidence hub's confusion-matrix PNG is a laptop-era artifact (v1 @
+0.9157) while headline metrics come from the registry (v2 @ 0.9170) — a later
+refinement could regenerate it from the champion; EKS-on-free-plan question parked
+until Phase 3 Task 0; several actions in the workflows still target Node 20 (GitHub
+forces Node 24 — bump majors when convenient); markdownlint nits in PLAN.md are known
+and not CI-checked.
