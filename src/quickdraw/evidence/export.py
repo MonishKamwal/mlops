@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+import markdown
 import plotly.graph_objects as go
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from mlflow.tracking import MlflowClient
@@ -34,6 +35,7 @@ from quickdraw.training.registry import (
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 EVAL_METRICS_PATH = Path("reports/eval/metrics.json")
 CONFUSION_MATRIX_PATH = Path("reports/eval/confusion_matrix.png")
+MODEL_CARD_PATH = Path("MODEL_CARD.md")
 REPO_SLUG = "MonishKamwal/mlops"
 # A real run where the gate blocked a deliberately crippled challenger (Phase 2 DoD).
 BLOCKED_GATE_RUN_URL = f"https://github.com/{REPO_SLUG}/actions/runs/29757829275"
@@ -132,11 +134,21 @@ def gather_runs(client: MlflowClient) -> list[RunRow]:
     return rows
 
 
-def load_eval_metrics(path: Path = EVAL_METRICS_PATH) -> dict | None:
+def load_eval_metrics(path: Path | None = None) -> dict | None:
     """The git-tracked eval snapshot (per-class table + confusion-matrix context)."""
+    path = path or EVAL_METRICS_PATH  # resolve at call time so the module const stays patchable
     if not path.exists():
         return None
     return json.loads(path.read_text())
+
+
+def load_model_card_html(path: Path | None = None) -> str | None:
+    """Render MODEL_CARD.md to HTML for the hub. The raw ``.md`` is also copied to the
+    site (render()), so the portfolio can consume the source instead of this markup."""
+    path = path or MODEL_CARD_PATH
+    if not path.exists():
+        return None
+    return markdown.markdown(path.read_text(), extensions=["tables", "fenced_code", "sane_lists"])
 
 
 def _base_layout(fig: go.Figure, title: str) -> go.Figure:
@@ -208,9 +220,12 @@ def build_data(runs: list[RunRow], eval_metrics: dict | None, gate_params: GateP
     }
 
 
-# Keys build_context adds on top of build_data — stripped back out to recover the JSON
+# Keys layered on top of build_data for the HTML — stripped back out to recover the JSON
 # data contract, so evidence.json and index.html are always rendered from the same data.
-_PRESENTATION_KEYS = frozenset({"plotly_cdn", "f1_chart", "accuracy_chart", "has_confusion_matrix"})
+# (The model card also ships as raw MODEL_CARD.md, so its rendered HTML isn't data either.)
+_PRESENTATION_KEYS = frozenset(
+    {"plotly_cdn", "f1_chart", "accuracy_chart", "has_confusion_matrix", "model_card_html"}
+)
 
 
 def build_context(runs: list[RunRow], eval_metrics: dict | None, gate_params: GateParams) -> dict:
@@ -236,10 +251,12 @@ def render(
 ) -> Path:
     """Read the registry + eval snapshot and write the static site into ``out_dir``:
     ``index.html`` (the standalone hub), ``evidence.json`` (the data contract for the
-    portfolio site), ``style.css``, and the confusion matrix when present."""
+    portfolio site), ``style.css``, ``MODEL_CARD.md``, and the confusion matrix when
+    present."""
     client = MlflowClient(tracking_uri=resolve_tracking_uri(tracking_uri))
     runs = gather_runs(client)
     context = build_context(runs, load_eval_metrics(), gate_params or load_gate_params())
+    context["model_card_html"] = load_model_card_html()
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -247,6 +264,8 @@ def render(
     if CONFUSION_MATRIX_PATH.exists():
         shutil.copy(CONFUSION_MATRIX_PATH, out_dir / "confusion_matrix.png")
         context["has_confusion_matrix"] = True
+    if MODEL_CARD_PATH.exists():
+        shutil.copy(MODEL_CARD_PATH, out_dir / "MODEL_CARD.md")  # raw source for the portfolio
 
     data = {k: v for k, v in context.items() if k not in _PRESENTATION_KEYS}
     (out_dir / "evidence.json").write_text(json.dumps(data, indent=2))

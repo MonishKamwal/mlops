@@ -124,6 +124,26 @@ tbody tr:hover { background: #fafafe; }
 .gate ul { color: var(--ink); }
 .gate a, footer a, .sub a { color: var(--brand); }
 
+.model-card h2 .src { font-size: 0.8rem; font-weight: 500; }
+.prose {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.25rem 1.75rem;
+  max-width: 74ch;
+}
+.prose h1 { font-size: 1.4rem; margin-top: 0; }
+.prose h2 { font-size: 1.05rem; border: 0; margin: 1.6rem 0 0.4rem; padding: 0; }
+.prose ul { padding-left: 1.2rem; }
+.prose code {
+  background: var(--bg);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.prose a { color: var(--brand); }
+
 footer {
   border-top: 1px solid var(--line);
   padding: 1.5rem;

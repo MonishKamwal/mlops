@@ -59,6 +59,15 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-21 (personal laptop, evening)** — **Phase 2 task 7 (model card) built**
+  (branch `phase2-model-card`): `MODEL_CARD.md` at the repo root — architecture,
+  intended use, training data + procedure, evaluation, limitations, ethical notes,
+  caveats — rendered into the evidence hub as a section via Python-Markdown and copied
+  to the site raw so the portfolio can reuse the source. `evidence.json` untouched: the
+  rendered card is presentation (added to `_PRESENTATION_KEYS`), not data. New
+  `markdown` dep in the `evidence` group. 3 new tests (119 total); a default-arg
+  monkeypatch gotcha surfaced + fixed (see LEARNING). **Only the `main` ruleset
+  re-enable remains to close Phase 2.**
 - **2026-07-21 (personal laptop, later)** — **Task 6 shipped live + narrowed
   train-deploy's path filter.** Enabling Pages + a dispatch published the hub at
   monishkamwal.github.io/mlops/ (index.html + evidence.json both serving); the
@@ -416,26 +425,31 @@ from the PR #15 / #16 merges, before the path-filter fix below). Live Lambda ser
 newest shipped challenger (**v5**); by design no alias tracks "deployed" — the built
 image is the source of truth for that.
 
-**Phase 2 task 6 (evidence hub) is built** (branch `phase2-evidence-hub`, PR
-pending): `quickdraw.evidence.export` renders the hub from the MLflow registry and
-writes `index.html` + **`evidence.json`** (the styling-agnostic data contract the
-portfolio site consumes) + `style.css` + the confusion matrix; `evidence-pages.yml`
-publishes to GitHub Pages after each green train-deploy. **Not live** until Monish
-enables Pages (UI) and dispatches the first run.
+**Phase 2 task 6 (evidence hub) is live** (merged PR #16; path-filter fix PR #17):
+`quickdraw.evidence.export` renders the hub from the MLflow registry and writes
+`index.html` + **`evidence.json`** (the styling-agnostic data contract the portfolio
+site consumes) + `style.css` + confusion matrix; `evidence-pages.yml` publishes to
+GitHub Pages after each green train-deploy (auto-refresh via `workflow_run` proven).
+**Live at monishkamwal.github.io/mlops/.**
+
+**Phase 2 task 7 (model card) is built** (branch `phase2-model-card`, PR pending):
+`MODEL_CARD.md` at the repo root — architecture, intended use, training data/procedure,
+evaluation, limitations, ethical notes — rendered into the hub as a section
+(Python-Markdown) and copied to the site raw so the portfolio can reuse the source.
+`evidence.json` unchanged (the rendered card is presentation, not data). 119 tests.
 
 ## Immediate next step (rolling — keep this precise)
 
-Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Tasks 1–5 done; task 6
-(evidence hub) is **built on `phase2-evidence-hub`** (PR pending). Remaining:
+Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Tasks 1–6 done and live
+(evidence hub at monishkamwal.github.io/mlops/); task 7 (model card) built on
+`phase2-model-card` (PR pending). After it merges, **one Phase 2 item remains:**
 
-1. **Finish task 6 — take it live:** merge the PR, then Monish enables Pages (repo →
-   *Settings → Pages → Source: GitHub Actions*) and dispatches once (*Actions →
-   Evidence hub → Run workflow*, on main). Hub lands at monishkamwal.github.io/mlops/.
-   Later: style the portfolio site's evidence section by consuming `evidence.json`
-   (the data contract) — not the throwaway hub HTML/CSS.
-2. **Task 7 — model card** (`MODEL_CARD.md`, rendered into the evidence hub).
-3. **Re-enable the `main` ruleset** (required PR + `ci.yml` check) via GitHub UI now
-   that CI is worth enforcing.
+1. **Re-enable the `main` ruleset** (GitHub UI): repo → *Settings → Rules → Rulesets*
+   → require a PR + the `ci.yml` status check. **Do NOT require signed commits** — no
+   signing keys on this machine (that's why the old ruleset was disabled). This closes
+   Phase 2.
+2. Then (Phase 2 tail / Phase 4 lead-in) style the portfolio site's evidence section by
+   consuming `evidence.json` — not the throwaway hub HTML/CSS.
 
 Watch items: the evidence hub's confusion-matrix PNG is a laptop-era artifact (v1 @
 0.9157) while headline metrics come from the registry (v2 @ 0.9170) — a later
