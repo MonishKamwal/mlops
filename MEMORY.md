@@ -62,6 +62,18 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-21 (personal laptop, night, later³)** — **Phase 3 task 4 (failsafe) built**
+  (branch `phase3-failsafe`): `eks-failsafe.yml` (monthly 09:00 UTC ~3h after the demo +
+  break-glass dispatch, **no** approval gate — it must run unattended) does an unconditional
+  `terraform destroy` (`continue-on-error`) then runs `scripts/eks_sweep.py`. The sweeper
+  deletes any surviving `tier=ephemeral` resources (EKS clusters+nodegroups → LBs → the
+  tagged VPC's instances/NAT/EIPs/subnets/SGs/route-tables/IGW/VPC), writes a job-summary
+  report, and exits nonzero on any deletion error (a real leak turns the run red). Safety
+  invariant: only ever acts on `tier=ephemeral` (persistent is `tier=persistent`, out of
+  reach) — pinned by a parametrized predicate test. Also moved eks-demo + eks-failsafe onto
+  one shared concurrency group `eks-cluster` so a failsafe can't fire mid-demo. 6 new tests
+  (125 total), ruff + workflow YAML clean. **The teardown net now exists → safe to create a
+  real cluster.**
 - **2026-07-21 (personal laptop, night, later²)** — **Phase 3 task 3 (eks-demo workflow) +
   the `gha-eks` IAM role built** (branch `phase3-eks-demo`). Prereq surfaced: `gha-app` has
   only S3/ECR/Lambda perms and can't create EKS, so added a **separate `gha-eks` role**
@@ -512,21 +524,20 @@ pending): Deployment (image by digest, `required`), `/healthz` startup+liveness+
 probes, resources, ClusterIP Service (LB toggle documented/off), optional HPA, and a
 `serviceMonitor` toggle for task 5; `helm lint` + `helm template` (all value paths) clean.
 
-**Task 3 (eks-demo workflow + `gha-eks` IAM role) built** (branch `phase3-eks-demo`, PR
-pending). Next, in order:
+**Tasks 3 + 4 built** — eks-demo + eks-failsafe workflows, the `gha-eks` role, and the
+boto3 sweeper (branch `phase3-failsafe`, PR pending). **The teardown net now exists, so a
+real cluster is finally safe to create.** Next, in order:
 
-1. **Monish (admin), once the PR merges — 3 steps to make eks-demo runnable:**
-   (a) `terraform apply` in `infra/persistent` to create the `gha-eks` role (1 add);
-   (b) add repo variable `GHA_EKS_ROLE_ARN` = `terraform output -raw gha_eks_role_arn`;
-   (c) create a GitHub **Environment `eks-demo`** with himself as a required reviewer —
-   the approval gate so no cluster spins up (spending credits) without a human click.
-2. **Task 4 — `eks-failsafe.yml`** (scheduled unconditional destroy + boto3 tag sweeper).
-   **Guardrail: do NOT run eks-demo for real until Task 4 exists.** Then the FIRST real
-   `terraform apply` is a *dispatched* eks-demo run — watch OIDC → apply → helm → smoke →
-   k6 → destroy, and confirm the account is clean afterward (this also proves the gha-eks
-   policy is complete; a missing IAM action shows up as an apply AccessDenied).
-3. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
-   dashboards-as-code).
+1. **Monish (admin), once the PR merges — 3 setup steps, then the first real run:**
+   (a) `terraform apply` in `infra/persistent` → creates `gha-eks` (review: **1 add, 0
+   change/destroy**); (b) repo variable `GHA_EKS_ROLE_ARN` = `terraform output -raw
+   gha_eks_role_arn`; (c) GitHub **Environment `eks-demo`** with himself as a required
+   reviewer. Then **dispatch `eks-demo`** (the first real `terraform apply`) and approve
+   it — watch OIDC → apply → helm → smoke → k6 → **`if: always()` destroy**; confirm the
+   account is clean after. A missing `gha-eks` IAM action shows up as an apply
+   AccessDenied (recoverable — add it, re-run; the failsafe/destroy clean up).
+2. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
+   dashboards-as-code) — the last Phase 3 task.
 
 Tail item (anytime): style the portfolio site's evidence section by consuming
 `evidence.json` (the data contract).

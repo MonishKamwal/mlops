@@ -16,10 +16,11 @@ permissions:
   id-token: write # OIDC assume-role for the ephemeral EKS role
   contents: read
 
-# Never let two cluster runs overlap; queue rather than cancel (a cancelled apply/destroy
-# could leave resources behind — the failsafe would catch it, but don't invite it).
+# Shared group with eks-failsafe so cluster runs never overlap; queue rather than cancel
+# (a cancelled apply/destroy could leave resources behind — the failsafe catches it, but
+# don't invite it).
 concurrency:
-  group: eks-demo
+  group: eks-cluster
   cancel-in-progress: false
 
 env:
