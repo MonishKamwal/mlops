@@ -180,6 +180,16 @@ data "aws_iam_policy_document" "gha_eks_permissions" {
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/quickdraw-ephemeral*"]
   }
 
+  # `enable_cluster_creator_admin_permissions` resolves the caller (this very role) via
+  # aws_iam_session_context, which calls iam:GetRole on the assumed role — i.e. on gha-eks
+  # itself. Read-only, and kept OUT of the manage-roles statement above so gha-eks can
+  # *read* but never *modify or delete* itself.
+  statement {
+    sid       = "ReadOwnRoleForSessionContext"
+    actions   = ["iam:GetRole"]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/gha-eks"]
+  }
+
   # The cluster's IRSA OIDC provider (per-cluster, name not predictable) + the
   # service-linked roles EKS/EC2/autoscaling create — the latter is inherently
   # constrained to AWS service principals.
