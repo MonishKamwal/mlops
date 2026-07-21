@@ -59,6 +59,15 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-21 (personal laptop, evening, later)** — **Phase 2 closed.** Task 7 merged
+  (PR #18) → model card live on the hub; the `main` ruleset re-enabled (new active
+  ruleset `branch-protection`: require PR + block deletion/force-push; no signed
+  commits). The task-7 merge triggered evidence-pages (published the card) and a
+  train-deploy (uv.lock bump → benign v6, gate held). **Phase 2 is done end-to-end** —
+  DVC → validate → registry → gate → OIDC train-deploy → evidence hub + model card, all
+  live and reproducible. Gap logged: the ruleset doesn't yet require the `test`/ci.yml
+  status check (Monish to add). Next: Phase 3 (ephemeral EKS), Task 0 = free-plan EKS
+  check.
 - **2026-07-21 (personal laptop, evening)** — **Phase 2 task 7 (model card) built**
   (branch `phase2-model-card`): `MODEL_CARD.md` at the repo root — architecture,
   intended use, training data + procedure, evaluation, limitations, ethical notes,
@@ -432,24 +441,36 @@ site consumes) + `style.css` + confusion matrix; `evidence-pages.yml` publishes 
 GitHub Pages after each green train-deploy (auto-refresh via `workflow_run` proven).
 **Live at monishkamwal.github.io/mlops/.**
 
-**Phase 2 task 7 (model card) is built** (branch `phase2-model-card`, PR pending):
-`MODEL_CARD.md` at the repo root — architecture, intended use, training data/procedure,
-evaluation, limitations, ethical notes — rendered into the hub as a section
-(Python-Markdown) and copied to the site raw so the portfolio can reuse the source.
-`evidence.json` unchanged (the rendered card is presentation, not data). 119 tests.
+**Phase 2 task 7 (model card) is merged and live** (PR #18): `MODEL_CARD.md` at the
+repo root — architecture, intended use, training data/procedure, evaluation,
+limitations, ethical notes — rendered into the hub as a section (Python-Markdown) and
+copied to the site raw so the portfolio can reuse the source. `evidence.json` unchanged
+(the rendered card is presentation, not data). 119 tests.
+
+**→ Phase 2 is COMPLETE (2026-07-21).** DVC → Pandera validation → MLflow-on-S3
+champion/challenger registry → quality gate → OIDC train-deploy (merge→live, zero
+manual steps) → evidence hub + model card, all live and reproducible. The `main`
+ruleset is re-enabled (active ruleset `branch-protection`: require PR, block
+deletion/force-push, no signed commits). **Known gap:** the ruleset does *not* yet
+require the `test`/ci.yml status check, so a red-CI PR could still merge until that's
+added.
 
 ## Immediate next step (rolling — keep this precise)
 
-Continue **Phase 2 — automation** (PLAN.md §5 Phase 2). Tasks 1–6 done and live
-(evidence hub at monishkamwal.github.io/mlops/); task 7 (model card) built on
-`phase2-model-card` (PR pending). After it merges, **one Phase 2 item remains:**
+**Phase 2 is complete.** Begin **Phase 3 — ephemeral EKS** (PLAN.md §5 Phase 3), but
+**Task 0 first (account-plan gate):** check the EKS console — if the post-July-2025
+free-plan account blocks EKS, upgrade to the paid plan (a direct upgrade carries the
+remaining credits over) and add the deferred CloudWatch billing alarm *before* creating
+any ephemeral infra (that's when real charges become possible). Only then: `infra/ephemeral/`
+(VPC + EKS spot node group), the `quickdraw-api` Helm chart, and the weekly `eks-demo.yml`
+spin-up → smoke/k6 → **`if: always()` destroy**.
 
-1. **Re-enable the `main` ruleset** (GitHub UI): repo → *Settings → Rules → Rulesets*
-   → require a PR + the `ci.yml` status check. **Do NOT require signed commits** — no
-   signing keys on this machine (that's why the old ruleset was disabled). This closes
-   Phase 2.
-2. Then (Phase 2 tail / Phase 4 lead-in) style the portfolio site's evidence section by
-   consuming `evidence.json` — not the throwaway hub HTML/CSS.
+Smaller tail items (anytime):
+
+1. **Finish the ruleset:** add the `test` (ci.yml) required status check to the active
+   `branch-protection` ruleset so a red-CI PR can't merge (Monish; GitHub UI).
+2. **Portfolio evidence section:** style it by consuming `evidence.json` (the data
+   contract) — Phase 2 tail / Phase 4 lead-in.
 
 Watch items: the evidence hub's confusion-matrix PNG is a laptop-era artifact (v1 @
 0.9157) while headline metrics come from the registry (v2 @ 0.9170) — a later
