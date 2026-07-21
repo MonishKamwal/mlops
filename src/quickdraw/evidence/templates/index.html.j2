@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QuickDraw MLOps — Evidence Hub</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="{{ plotly_cdn }}" charset="utf-8"></script>
+</head>
+<body>
+  <header class="hero">
+    <p class="eyebrow">MLOps evidence hub</p>
+    <h1>QuickDraw sketch classifier</h1>
+    <p class="sub">
+      Published straight from the MLflow registry on every gated deploy — the registry,
+      not a checked-in snapshot, is the source of truth for what is champion.
+      <span class="stamp">generated {{ generated_at }}</span>
+    </p>
+    <p class="badges">
+      <img src="https://github.com/{{ repo_slug }}/actions/workflows/ci.yml/badge.svg" alt="CI status">
+      <img src="https://github.com/{{ repo_slug }}/actions/workflows/train-deploy.yml/badge.svg" alt="Train &amp; Deploy status">
+    </p>
+  </header>
+
+  <main>
+    {% if champion %}
+    <section class="cards">
+      <div class="card highlight">
+        <span class="label">Champion</span>
+        <span class="value">v{{ champion.version }}</span>
+        <span class="note">best model ever validated — the quality bar</span>
+      </div>
+      <div class="card">
+        <span class="label">Test accuracy</span>
+        <span class="value">{{ '%.4f'|format(champion.test_accuracy) if champion.test_accuracy is not none else '—' }}</span>
+      </div>
+      <div class="card">
+        <span class="label">Macro F1</span>
+        <span class="value">{{ '%.4f'|format(champion.macro_f1) if champion.macro_f1 is not none else '—' }}</span>
+      </div>
+      <div class="card">
+        <span class="label">Val accuracy</span>
+        <span class="value">{{ '%.4f'|format(champion.val_accuracy) if champion.val_accuracy is not none else '—' }}</span>
+      </div>
+    </section>
+    {% endif %}
+
+    <section>
+      <h2>Experiment history</h2>
+      <p class="lede">
+        Every training run registered in MLflow. The <strong>champion</strong> alias moves
+        only on a strict improvement, so the bar never ratchets down; a passing challenger
+        ships even when it doesn't re-crown.
+      </p>
+      {% if accuracy_chart %}<div class="chart">{{ accuracy_chart|safe }}</div>{% endif %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Run</th><th>Started</th><th>Epochs</th><th>LR</th>
+              <th>Val acc</th><th>Test acc</th><th>Macro F1</th><th>Registry</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in runs %}
+            <tr>
+              <td class="mono">{{ r.run_id[:8] }}</td>
+              <td>{{ r.started }}</td>
+              <td>{{ r.epochs if r.epochs is not none else '—' }}</td>
+              <td>{{ r.learning_rate if r.learning_rate is not none else '—' }}</td>
+              <td>{{ '%.4f'|format(r.val_accuracy) if r.val_accuracy is not none else '—' }}</td>
+              <td>{{ '%.4f'|format(r.test_accuracy) if r.test_accuracy is not none else '—' }}</td>
+              <td>{{ '%.4f'|format(r.macro_f1) if r.macro_f1 is not none else '—' }}</td>
+              <td>
+                {% if r.version %}
+                <span class="tag {{ 'champ' if r.alias and 'champion' in r.alias else 'chall' if r.alias else '' }}">
+                  v{{ r.version }}{% if r.alias %} · {{ r.alias }}{% endif %}
+                </span>
+                {% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid2">
+      {% if f1_chart %}
+      <div>
+        <h2>Per-class F1</h2>
+        <div class="chart">{{ f1_chart|safe }}</div>
+      </div>
+      {% endif %}
+      {% if has_confusion_matrix %}
+      <div>
+        <h2>Confusion matrix</h2>
+        <img class="cm" src="confusion_matrix.png" alt="Confusion matrix on the held-out test split">
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="gate">
+      <h2>The quality gate</h2>
+      <p class="lede">
+        A freshly trained challenger ships only if it clears an absolute floor
+        <strong>and</strong> doesn't regress on the champion beyond a tolerance band.
+      </p>
+      <ul>
+        <li>Absolute floor: <strong>test_accuracy &ge; {{ gate.min_test_accuracy }}</strong></li>
+        <li>No regression: <strong>challenger &ge; champion &minus; {{ gate.epsilon }}</strong></li>
+      </ul>
+      <p>
+        See the gate do its job: a deliberately crippled model was
+        <a href="{{ blocked_gate_run_url }}">blocked in CI &rarr;</a>
+      </p>
+    </section>
+
+    {% if per_class %}
+    <section>
+      <h2>Per-class metrics</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1</th><th>Support</th></tr>
+          </thead>
+          <tbody>
+            {% for row in per_class %}
+            <tr>
+              <td>{{ row.cls }}</td>
+              <td>{{ '%.3f'|format(row.precision) }}</td>
+              <td>{{ '%.3f'|format(row.recall) }}</td>
+              <td>{{ '%.3f'|format(row.f1) }}</td>
+              <td>{{ row.support }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p>
+      Source: <a href="https://github.com/{{ repo_slug }}">github.com/{{ repo_slug }}</a>
+      &middot; published from the MLflow registry by <code>evidence-pages.yml</code>
+    </p>
+  </footer>
+</body>
+</html>

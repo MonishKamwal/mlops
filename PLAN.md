@@ -290,6 +290,14 @@ that can say no. Evidence hub goes live.
    publish alongside evaluation reports (confusion matrix), CI status badges, and later k6 +
    Evidently outputs. `evidence-pages.yml` assembles `evidence/` + generated artifacts →
    deploy. Portfolio site links/iframes these pages.
+
+   > **Amended 2026-07-21:** the renderer is `quickdraw.evidence.export` (module, run as
+   > `python -m quickdraw.evidence.export`), and it reads the **MLflow registry** as the
+   > source of truth for champion state rather than the checked-in metrics snapshot (which
+   > drifts from the CI-trained champion). Besides `index.html` it emits **`evidence.json`**,
+   > a styling-agnostic data contract — the portfolio site consumes that JSON and renders its
+   > own styled components, so the hub's HTML/CSS stay throwaway. `build_data()` (pure JSON)
+   > and `build_context()` (data + presentation) keep the two concerns separate.
 7. Add model card (`MODEL_CARD.md`, rendered into evidence).
 
 **Tools introduced:** DVC, Pandera, MLflow registry semantics, GitHub OIDC deploy path,

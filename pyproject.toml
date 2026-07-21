@@ -36,6 +36,14 @@ train = [
     "pandera>=0.26",
     "torch>=2.6",
 ]
+# Evidence-hub renderer (Phase 2 task 6) — only the CI Pages job and local previews
+# need these, and the serving image never imports quickdraw.evidence, so they stay
+# out of [project.dependencies]. In default-groups so `uv sync` + ci.yml's pytest can
+# import the module; the Dockerfile's --no-default-groups keeps them out of the image.
+evidence = [
+    "jinja2>=3.1",
+    "plotly>=5.24",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -48,7 +56,7 @@ packages = ["src/quickdraw"]
 # pinned to PyTorch's CPU wheel index — the default Linux wheel drags in ~2.5 GB of
 # CUDA libraries that a laptop/CI/Lambda project never uses.
 [tool.uv]
-default-groups = ["dev", "train"]
+default-groups = ["dev", "train", "evidence"]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]

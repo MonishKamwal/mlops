@@ -1,0 +1,81 @@
+# Build and publish the evidence hub to GitHub Pages (PLAN.md §5 Phase 2, task 6).
+#
+# The hub is rendered from the MLflow registry — the source of truth for champion
+# state — so it refreshes whenever a new model deploys. It runs after a successful
+# Train & Deploy, on manual dispatch, and when the renderer or eval report changes.
+name: Evidence hub
+
+on:
+  workflow_run:
+    workflows: ["Train & Deploy"]
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - src/quickdraw/evidence/**
+      - reports/eval/**
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC: assume the AWS role AND authenticate the Pages deploy
+  contents: read
+  pages: write
+
+# One Pages publish at a time; let an in-flight deploy finish rather than cancel it.
+concurrency:
+  group: evidence-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Publish only off a *green* Train & Deploy; manual/push triggers always build.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      MLFLOW_STATE_BUCKET: ${{ vars.MLFLOW_STATE_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.GHA_APP_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The hub reads registry state + per-run metrics straight from mlflow.db; no
+      # artifact download needed, so no S3 artifact access beyond this one DB copy.
+      - name: Pull MLflow state from S3
+        run: scripts/mlflow_sync.sh pull
+
+      # Confusion matrix is a DVC out; if it isn't in the remote the hub simply omits
+      # it (render() guards on the file existing), so this stays best-effort.
+      - name: Pull the confusion matrix (best-effort)
+        run: uv run dvc pull reports/eval/confusion_matrix.png || echo "confusion matrix not in the remote — hub will omit it"
+
+      - name: Render the evidence hub
+        run: uv run python -m quickdraw.evidence.export --out _site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
