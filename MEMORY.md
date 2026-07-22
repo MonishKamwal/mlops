@@ -70,6 +70,16 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-22 (personal laptop, later²)** — **First fully-green `eks-demo` run — Phase 3
+  tasks 1–4 proven on a real cluster.** With PR #26 (CNI `before_compute`) merged, run
+  29936256948 went green end-to-end (25m20s): `terraform apply` → **2× `t4g.small` nodes
+  `Ready`** (v1.33, AL2023 **aarch64**) → helm deploy → **2 `quickdraw-api` pods `1/1 Running`,
+  one per node** (the same arm64 image the Lambda serves) → smoke → k6 → `if: always()` destroy
+  (✅, account clean). k6 (20 VU / 3 min): **35,774 reqs, 198.7 rps, 0.00% failed, checks 100%,
+  p95 128 ms** (threshold p95<1500 held). Evidence artifact (`eks-demo-evidence`) has
+  nodes/pods/describe + k6 HTML. The CNI-ordering fix was the last wall. **Remaining for Phase 3:
+  task 5 (observability) + the DoD "two consecutive scheduled runs" (this was one manual
+  dispatch).**
 - **2026-07-22 (personal laptop, later)** — **`t4g.small` fix cleared the launch wall; next
   failure was CNI-not-ready. Fixed by managing addons.** With PR #25 merged, the second real
   `eks-demo` run (29926961153) got much further: 2× `t4g.small` **launched** (visible `Running`
@@ -547,27 +557,23 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phase 2 complete; Phase 3 (ephemeral EKS) bringing up the first real cluster.** Tasks 1–4
-(ephemeral TF root, Helm chart, eks-demo + eks-failsafe workflows, `gha-eks` role/env/repo-var)
-are all **merged and live**. Two real `eks-demo` runs have walked the cluster up wall-by-wall:
-IAM (fixed, PR #24/#25) → `t3.medium` not free-tier-eligible (fixed → `t4g.small` Graviton,
-PR #25) → nodes launch+register but stay NotReady, `Unhealthy nodes` (CNI unmanaged). So
-OIDC → apply → **control plane + node launch + node registration** → `if: always()` destroy are
-all *proven*; the open item is node **readiness**. The vCPU quota is a non-issue (this account is
-at **16**, not the new-account default 1). Next, in order:
+**Phase 2 complete; Phase 3 (ephemeral EKS) — first real cluster is GREEN end-to-end.** Tasks
+1–4 (ephemeral TF root, Helm chart, eks-demo + eks-failsafe workflows, `gha-eks` role/env/repo-var)
+are merged, live, and **proven on a real cluster**: run 29936256948 ran apply → 2× `t4g.small`
+`Ready` → helm (arm64 pod per node) → smoke → k6 (0% fail, p95 128 ms) → `if: always()` destroy,
+clean. The wall-by-wall path that got here: IAM (PR #24/#25) → `t3.medium` ineligible → `t4g.small`
+Graviton (PR #25) → CNI unmanaged/NotReady → `addons` before_compute (PR #26). vCPU quota is a
+non-issue (account at **16**). Next:
 
-1. **Merge the CNI fix.** Branch `phase3-eks-cni-addons` (PR pending): `addons` block in `eks.tf`
-   with `vpc-cni { before_compute = true }` (v21 renamed `cluster_addons`→`addons`) so the CNI is
-   ready before nodes join, **plus** self-diagnosing workflow changes (`Configure kubectl`
-   `if: always()`; capture dumps `describe nodes` + `aws-node` logs). `fmt`/`validate`/`check-yaml`
-   clean; no IAM change needed (`gha-eks` has `eks:*`).
-2. **Re-dispatch `eks-demo`** and approve — watch apply get **past node readiness** → helm → smoke
-   → k6 → destroy; confirm the account is clean after. If nodes *still* go NotReady, the enriched
-   evidence artifact now has `nodes-describe.txt` + `aws-node.log` to read the real reason (no more
-   blind cycles).
-3. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
-   dashboards-as-code) — the last Phase 3 task. `t4g.small`'s 2 GB was chosen partly to leave
-   room for this; may still need 3 nodes / resource-tuned Prometheus.
+1. **Task 5 — observability** (the last build task): kube-prometheus-stack via Helm at run start,
+   `serviceMonitor.enabled=true` in the API chart → Prometheus scrapes `/metrics`, Grafana
+   dashboards-as-code (`deploy/grafana/dashboards/`), capture PNGs under k6 load → evidence hub.
+   Watch RAM: 2× `t4g.small` = 4 GB total; the stack may need `desired_size` 3 and/or tuned
+   Prometheus requests/retention. This is the natural next branch.
+2. **Phase 3 DoD tail:** need **two consecutive *scheduled* runs** green (so far: one manual
+   dispatch). The monthly cron will supply these over time, or dispatch again to confirm stability.
+3. **Housekeeping (anytime):** the eks-demo run page is public evidence — link it from the hub;
+   several workflow actions still target Node 20 (forced to 24).
 
 Tail item (anytime): style the portfolio site's evidence section by consuming
 `evidence.json` (the data contract).
