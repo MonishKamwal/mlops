@@ -4,6 +4,30 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-22 — "Unhealthy nodes": nodes join but stay NotReady when the CNI isn't managed
+
+- With the instance-type wall cleared (`t4g.small` Graviton), the first apply got *further* and
+  died differently: `NodeCreationFailure: Unhealthy nodes in the kubernetes cluster`. The word
+  matters — **"unhealthy" ≠ "failed to join."** The two `t4g.small` instances launched (visible
+  `Running` in EC2), registered with the control plane (so node→API networking is fine), and
+  then sat **NotReady** until the managed node group timed out and rolled back. A registered EKS
+  node is held `NotReady` until its **network plugin (VPC CNI / `aws-node`) reports ready** —
+  so "unhealthy nodes" at create time is almost always a CNI problem, not a networking or IAM one.
+- Root cause: we declared *no* addons, leaning on the cluster's self-bootstrapped default CNI.
+  On a fresh cluster the node group can come up before that CNI is configured, so nodes register
+  into a cluster with no working network plugin. Fix: manage the addon and **order it before the
+  nodes** — `addons = { vpc-cni = { before_compute = true } }`. `before_compute` installs/configures
+  the CNI *before* the node group is created, so nodes find a ready network plugin the moment they
+  join. (coredns/kube-proxy don't need it — coredns is a Deployment that schedules once nodes exist.)
+- Two gotchas found in passing: (1) the EKS module **v21 renamed `cluster_addons` → `addons`**
+  (the v20 name errors as "argument not expected"); (2) we'd been **flying blind on the failure**
+  because the `Configure kubectl` step had no `if: always()`, so on an apply failure it was skipped
+  and the `if: always()` evidence step's `kubectl` calls hit no kubeconfig (swallowed by `|| true`).
+  The control plane *does* exist between an apply failure and the `if: always()` destroy, so making
+  kubectl config + node diagnostics (`describe nodes`, `aws-node` logs) run `if: always()` turns a
+  blind 40-minute cycle into a self-explaining one. Lesson: a failure-path diagnostic is only useful
+  if it actually runs on the failure path — check the `if:` conditions, not just that the step exists.
+
 ## 2026-07-22 — The free plan blocks worker nodes three ways; "control plane works" ≠ "EKS works"
 
 - Task 0 checked "is EKS blocked?" by creating a **control-plane-only** cluster — it worked,

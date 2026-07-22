@@ -63,7 +63,13 @@ jobs:
           terraform init -input=false
           terraform apply -auto-approve -input=false
 
+      # if: always() + continue-on-error so that when the apply fails *after* the control
+      # plane exists (e.g. a node group that never goes Ready), we can still point kubectl at
+      # the cluster and let the capture step below dump node diagnostics before the destroy —
+      # instead of flying blind. A genuinely absent cluster just makes this a no-op.
       - name: Configure kubectl
+        if: always()
+        continue-on-error: true
         run: aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
 
       - name: Resolve the live image digest (what the Lambda tier serves)
@@ -109,6 +115,13 @@ jobs:
         if: always()
         run: |
           mkdir -p eks-evidence
+          # Node-level diagnostics first — on an apply failure these are the whole point:
+          # `describe nodes` shows the NotReady conditions/taints, and the aws-node logs show
+          # why the CNI didn't come up. On a healthy run they're just extra evidence.
+          kubectl get nodes -o wide > eks-evidence/nodes.txt 2>&1 || true
+          kubectl describe nodes > eks-evidence/nodes-describe.txt 2>&1 || true
+          kubectl get pods -A -o wide > eks-evidence/pods.txt 2>&1 || true
+          kubectl -n kube-system logs -l k8s-app=aws-node --tail=200 --all-containers > eks-evidence/aws-node.log 2>&1 || true
           kubectl get all -A -o wide > eks-evidence/resources.txt 2>&1 || true
           kubectl -n "$NAMESPACE" rollout history "deploy/$RELEASE" > eks-evidence/rollout.txt 2>&1 || true
           kubectl top nodes > eks-evidence/top-nodes.txt 2>&1 || true
