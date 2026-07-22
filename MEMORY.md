@@ -70,6 +70,19 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-22 (personal laptop, later)** — **`t4g.small` fix cleared the launch wall; next
+  failure was CNI-not-ready. Fixed by managing addons.** With PR #25 merged, the second real
+  `eks-demo` run (29926961153) got much further: 2× `t4g.small` **launched** (visible `Running`
+  in EC2, node group `Creating` with 0 health issues) and **registered** with the control plane
+  — then sat NotReady and failed at ~37 min with `NodeCreationFailure: Unhealthy nodes in the
+  kubernetes cluster` (nodes joined but the VPC CNI never came up; `if: always()` destroy cleaned
+  up). Root cause: we declared no addons, so nothing installed/ordered the CNI before the node
+  group. Fix (branch `phase3-eks-cni-addons`, PR pending): `addons = { coredns, kube-proxy, vpc-cni
+  { before_compute = true } }` in `eks.tf` (v21 renamed `cluster_addons` → `addons`), so the CNI
+  is ready before nodes join. Also made the workflow **self-diagnosing**: `Configure kubectl` is now
+  `if: always()`+`continue-on-error` and the capture step dumps `describe nodes` + `aws-node` logs —
+  the failure path had been blind (kubectl unconfigured on apply-fail). `fmt`+`validate`+`check-yaml`
+  clean; `gha-eks` already has `eks:*`/`ec2:*` so no IAM change. Not yet applied — merge + re-dispatch.
 - **2026-07-22 (personal laptop)** — **First real `eks-demo` apply surfaced the free-plan
   node-group wall; fixed by moving to Graviton.** The IAM-fix loop (branch
   `phase3-eks-iam-fix`; PR #24 merged only its first commit `d3d9b5b`, while 3 later IAM
@@ -534,37 +547,25 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phase 2 complete; Phase 3 (ephemeral EKS) underway.** Task 0 resolved 2026-07-21: EKS
-runs on the free plan (no upgrade needed); the test cluster + a stray EIP were cleaned up
-→ account at zero billable EKS/EC2/NAT/ELB/EIP. **Task 1 (`infra/ephemeral`) built**
-(branch `phase3-ephemeral-infra`, PR pending): second Terraform root (state key
-`ephemeral/terraform.tfstate`), VPC module `~> 6.0` (2 AZ, single NAT) + EKS module
-`~> 21.0` (K8s 1.33, one managed node group **2× t3.medium SPOT**, public endpoint for CI
-kubectl, cluster-creator admin access entry); `init -backend=false` + `validate` pass
-locally. **NOT applied** — by design, apply waits until the teardown path exists.
-**Task 2 (Helm chart `deploy/helm/quickdraw-api`) built** (branch `phase3-helm-chart`, PR
-pending): Deployment (image by digest, `required`), `/healthz` startup+liveness+readiness
-probes, resources, ClusterIP Service (LB toggle documented/off), optional HPA, and a
-`serviceMonitor` toggle for task 5; `helm lint` + `helm template` (all value paths) clean.
+**Phase 2 complete; Phase 3 (ephemeral EKS) bringing up the first real cluster.** Tasks 1–4
+(ephemeral TF root, Helm chart, eks-demo + eks-failsafe workflows, `gha-eks` role/env/repo-var)
+are all **merged and live**. Two real `eks-demo` runs have walked the cluster up wall-by-wall:
+IAM (fixed, PR #24/#25) → `t3.medium` not free-tier-eligible (fixed → `t4g.small` Graviton,
+PR #25) → nodes launch+register but stay NotReady, `Unhealthy nodes` (CNI unmanaged). So
+OIDC → apply → **control plane + node launch + node registration** → `if: always()` destroy are
+all *proven*; the open item is node **readiness**. The vCPU quota is a non-issue (this account is
+at **16**, not the new-account default 1). Next, in order:
 
-**Tasks 3 + 4 built and the `gha-eks` role/env/repo-var are all live** — the first real
-`eks-demo` run assumed `gha-eks`, applied the VPC + EKS control plane, and got as far as the
-node group before the free-plan wall (above). So OIDC → apply → **control plane** →
-`if: always()` destroy is all *proven*; only the node group needs the Graviton fix. That fix
-is written (`t4g.small` on-demand, branch below) but **not merged or applied**. Next, in order:
-
-1. **Land the fix on main.** Current work is on branch `phase3-eks-iam-fix` (HEAD 43c532e),
-   which carries the 3 unmerged IAM commits **plus** the new Graviton node change. PR #24 is
-   already merged/closed, so this needs a **fresh PR** (or fast-forward) to main. (Claude has
-   made the edits + local `fmt`/`validate`; commit/push/PR pending Monish's go-ahead.)
-2. **vCPU service quota — already sufficient, no action.** Checked 2026-07-22: this account's
-   "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances" quota (us-east-2) is
-   **16 vCPU**, not the new-account default of 1 — well above the node group's peak (max_size
-   3 × 2 vCPU = 6). Left here only so a future machine doesn't re-investigate it.
-3. **Re-dispatch `eks-demo`** and approve it — watch OIDC → apply → **node group launches** →
-   helm → smoke → k6 → **`if: always()` destroy**; confirm the account is clean after. Any
-   remaining `gha-eks` IAM gap shows up as an apply AccessDenied (recoverable — add it, re-run).
-4. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
+1. **Merge the CNI fix.** Branch `phase3-eks-cni-addons` (PR pending): `addons` block in `eks.tf`
+   with `vpc-cni { before_compute = true }` (v21 renamed `cluster_addons`→`addons`) so the CNI is
+   ready before nodes join, **plus** self-diagnosing workflow changes (`Configure kubectl`
+   `if: always()`; capture dumps `describe nodes` + `aws-node` logs). `fmt`/`validate`/`check-yaml`
+   clean; no IAM change needed (`gha-eks` has `eks:*`).
+2. **Re-dispatch `eks-demo`** and approve — watch apply get **past node readiness** → helm → smoke
+   → k6 → destroy; confirm the account is clean after. If nodes *still* go NotReady, the enriched
+   evidence artifact now has `nodes-describe.txt` + `aws-node.log` to read the real reason (no more
+   blind cycles).
+3. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
    dashboards-as-code) — the last Phase 3 task. `t4g.small`'s 2 GB was chosen partly to leave
    room for this; may still need 3 nodes / resource-tuned Prometheus.
 

@@ -27,6 +27,21 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
+  # Manage the core networking addons as EKS-managed addons instead of leaning on the
+  # cluster's self-bootstrapped defaults. vpc-cni gets before_compute = true so the CNI is
+  # installed and configured BEFORE the node group is created — otherwise nodes register
+  # with no working network plugin, stay NotReady, and the node group create fails with
+  # `NodeCreationFailure: Unhealthy nodes` (exactly what bit the first real run). coredns
+  # and kube-proxy take the cluster-version default and settle once nodes are Ready.
+  # (v21 renamed this arg from `cluster_addons` to `addons`.)
+  addons = {
+    coredns    = {}
+    kube-proxy = {}
+    vpc-cni = {
+      before_compute = true
+    }
+  }
+
   # The node-group key becomes its name, and the module derives the node IAM role from it
   # (`<name>-eks-node-group-*`). Prefixing the key with the cluster name keeps that role
   # under `quickdraw-ephemeral*`, which is exactly what the gha-eks IAM policy is scoped to.
