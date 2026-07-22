@@ -4,6 +4,38 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-22 — The free plan blocks worker nodes three ways; "control plane works" ≠ "EKS works"
+
+- Task 0 checked "is EKS blocked?" by creating a **control-plane-only** cluster — it worked,
+  so we recorded "EKS is NOT blocked on the free plan." That was a false all-clear: the
+  control plane is a managed AWS service, but **worker nodes are EC2**, and EC2 is where the
+  post-July-2025 free plan bites. The first real `eks-demo` apply got all the way through the
+  control plane and died at the node group: `AsgInstanceLaunchFailures ... t3.medium is not
+  eligible for Free Tier`. Lesson: verify the part that's actually constrained, end to end —
+  a smoke test that stops short of the constraint proves nothing about it.
+- The new free plan (accounts created on/after 2025-07-15) constrains nodes **three** ways,
+  and you hit them in sequence:
+  1. **Instance eligibility.** Only a fixed list is free-tier eligible: `t3.micro`,
+     `t3.small`, `t4g.micro`, `t4g.small`, `c7i-flex.large`, `m7i-flex.large` (6 months).
+     `t3.medium` isn't on it → launch refused. (This differs from the *legacy* free tier,
+     whose rule was "t2.micro, or t3.micro only where t2 is unavailable.")
+  2. **vCPU service quota.** New accounts *can* default to a **1-vCPU** quota on "Running
+     On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances." *Every* eligible type is ≥2
+     vCPU, so if you have that default, nothing launches until you request an increase (Service
+     Quotas console) — a separate failure that only surfaces *after* you fix eligibility. Check
+     it first: on this account it was already **16**, so it never actually bit us — but it's the
+     classic second wall, worth ruling out before a 45-minute apply discovers it for you.
+  3. **Architecture.** Our serving image is single-platform `linux/arm64` (to match the
+     Lambda tier), so nodes must be arm64 too. `t3.*` is x86_64 — it would boot and then fail
+     to run the pod (`exec format error`). Only `t4g.*` (Graviton) is both eligible *and*
+     arm64. So the arm64 constraint that felt like a burden actually *narrows the choice to
+     the right answer* and reinforces the "one artifact, both tiers" story: local Apple
+     Silicon → Lambda → Graviton nodes are all arm64, one image the whole way.
+- Resolution (staying on the free plan, no paid upgrade): node group → `t4g.small` Graviton,
+  `ami_type = AL2023_ARM_64_STANDARD` (the module defaults to x86_64 and won't infer arch
+  from `instance_types`), `capacity_type = ON_DEMAND` (these types are free *on-demand*;
+  spot would bill spot price against credits for nothing), plus a one-time vCPU quota bump.
+
 ## 2026-07-21 — Module constants as default args aren't monkeypatchable
 
 - `def load_x(path: Path = MODULE_CONST)` captures `MODULE_CONST`'s *value* at function

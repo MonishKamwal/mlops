@@ -15,12 +15,20 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 - **The AWS account is on the post-July-2025 free plan.** Created ~July 2026 → plan ends
   ~Jan 2027 or when credits run out, whichever is first. $100 credits + up to $100 earnable.
-  The account *cannot incur charges*. **EKS is NOT blocked on the free plan** — verified
-  2026-07-21 by creating a cluster (control-plane only, since deleted); so Phase 3 needs
-  no upgrade to paid. EKS still *draws down credits* though (~$0.10/hr control plane +
-  nodes + NAT), so the ephemeral teardown discipline is the real guardrail. (A direct
-  upgrade to paid would carry remaining credits over; via Organizations/Control Tower it
-  would forfeit them — moot unless we ever upgrade.)
+  The account *cannot incur charges*. **The EKS control plane is NOT blocked** (verified
+  2026-07-21 with a control-plane-only cluster) — but **worker nodes are constrained three
+  ways** (discovered 2026-07-22 on the first real node-group apply; details in LEARNING.md):
+  (1) only a fixed list of instance types is free-tier-eligible (`t3.micro/small`,
+  `t4g.micro/small`, `c7i-flex.large`, `m7i-flex.large`, 6 mo) — `t3.medium` is NOT, which is
+  what failed; (2) new accounts get a default **1-vCPU service quota** ("Running On-Demand
+  Standard … instances") that would block every eligible type (all ≥2 vCPU) until raised via
+  the Service Quotas console — though *this* account was already at **16** (checked 2026-07-22),
+  so it wasn't a blocker here; (3) the serving image is **arm64-only**, so nodes must be
+  Graviton (`t4g`), not x86 `t3`. Resolution stays on the free plan, no paid upgrade: node
+  group = **`t4g.small` Graviton on-demand** (us-east-2 vCPU quota already 16, ample). EKS still *draws down credits* (control plane + nodes + NAT), so
+  the ephemeral teardown discipline is the real guardrail. (A direct upgrade to paid would
+  carry remaining credits over; via Organizations/Control Tower it would forfeit them — moot
+  unless we upgrade.)
 - AWS Budgets ($10 / $25 / $50, email alerts) exist — created via Console 2026-07-03. The
   CloudWatch billing alarm is deliberately **deferred**: a free-plan account bills $0 by
   construction. It becomes mandatory the day the account upgrades to paid (PLAN.md
@@ -62,6 +70,21 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-22 (personal laptop)** — **First real `eks-demo` apply surfaced the free-plan
+  node-group wall; fixed by moving to Graviton.** The IAM-fix loop (branch
+  `phase3-eks-iam-fix`; PR #24 merged only its first commit `d3d9b5b`, while 3 later IAM
+  commits `85a6d85`/`2c45b58`/`43c532e` got the apply through the control plane) ended at the
+  node group: run 29865681424 died with `t3.medium is not eligible for Free Tier` →
+  `CREATE_FAILED` (46 min in; the `if: always()` destroy then cleaned up — teardown net works).
+  Corrected the stale "EKS not blocked" fact: the control plane is fine, but nodes hit
+  eligibility + a default **1-vCPU quota** + our **arm64-only image** (see LEARNING). Monish
+  chose to **stay on the free plan** (not upgrade to paid): node group → **`t4g.small`
+  Graviton/arm64** (matches the image, free-plan-eligible, 2 GB headroom for task 5),
+  `ami_type=AL2023_ARM_64_STANDARD`, `capacity_type=ON_DEMAND` (spot would bill against credits
+  for nothing). `terraform fmt`+`validate` clean locally. The vCPU quota turned out to be a
+  non-issue — this account's us-east-2 "Running On-Demand Standard" limit is already **16**
+  (checked 2026-07-22), well above the node group's peak of 6. Not yet applied — one prereq:
+  the branch lands on main.
 - **2026-07-21 (personal laptop, night, later³)** — **Phase 3 task 4 (failsafe) built**
   (branch `phase3-failsafe`): `eks-failsafe.yml` (monthly 09:00 UTC ~3h after the demo +
   break-glass dispatch, **no** approval gate — it must run unattended) does an unconditional
@@ -524,20 +547,26 @@ pending): Deployment (image by digest, `required`), `/healthz` startup+liveness+
 probes, resources, ClusterIP Service (LB toggle documented/off), optional HPA, and a
 `serviceMonitor` toggle for task 5; `helm lint` + `helm template` (all value paths) clean.
 
-**Tasks 3 + 4 built** — eks-demo + eks-failsafe workflows, the `gha-eks` role, and the
-boto3 sweeper (branch `phase3-failsafe`, PR pending). **The teardown net now exists, so a
-real cluster is finally safe to create.** Next, in order:
+**Tasks 3 + 4 built and the `gha-eks` role/env/repo-var are all live** — the first real
+`eks-demo` run assumed `gha-eks`, applied the VPC + EKS control plane, and got as far as the
+node group before the free-plan wall (above). So OIDC → apply → **control plane** →
+`if: always()` destroy is all *proven*; only the node group needs the Graviton fix. That fix
+is written (`t4g.small` on-demand, branch below) but **not merged or applied**. Next, in order:
 
-1. **Monish (admin), once the PR merges — 3 setup steps, then the first real run:**
-   (a) `terraform apply` in `infra/persistent` → creates `gha-eks` (review: **1 add, 0
-   change/destroy**); (b) repo variable `GHA_EKS_ROLE_ARN` = `terraform output -raw
-   gha_eks_role_arn`; (c) GitHub **Environment `eks-demo`** with himself as a required
-   reviewer. Then **dispatch `eks-demo`** (the first real `terraform apply`) and approve
-   it — watch OIDC → apply → helm → smoke → k6 → **`if: always()` destroy**; confirm the
-   account is clean after. A missing `gha-eks` IAM action shows up as an apply
-   AccessDenied (recoverable — add it, re-run; the failsafe/destroy clean up).
-2. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
-   dashboards-as-code) — the last Phase 3 task.
+1. **Land the fix on main.** Current work is on branch `phase3-eks-iam-fix` (HEAD 43c532e),
+   which carries the 3 unmerged IAM commits **plus** the new Graviton node change. PR #24 is
+   already merged/closed, so this needs a **fresh PR** (or fast-forward) to main. (Claude has
+   made the edits + local `fmt`/`validate`; commit/push/PR pending Monish's go-ahead.)
+2. **vCPU service quota — already sufficient, no action.** Checked 2026-07-22: this account's
+   "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances" quota (us-east-2) is
+   **16 vCPU**, not the new-account default of 1 — well above the node group's peak (max_size
+   3 × 2 vCPU = 6). Left here only so a future machine doesn't re-investigate it.
+3. **Re-dispatch `eks-demo`** and approve it — watch OIDC → apply → **node group launches** →
+   helm → smoke → k6 → **`if: always()` destroy**; confirm the account is clean after. Any
+   remaining `gha-eks` IAM gap shows up as an apply AccessDenied (recoverable — add it, re-run).
+4. **Task 5 — observability** (kube-prometheus-stack, ServiceMonitor → `/metrics`, Grafana
+   dashboards-as-code) — the last Phase 3 task. `t4g.small`'s 2 GB was chosen partly to leave
+   room for this; may still need 3 nodes / resource-tuned Prometheus.
 
 Tail item (anytime): style the portfolio site's evidence section by consuming
 `evidence.json` (the data contract).

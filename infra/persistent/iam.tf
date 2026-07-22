@@ -164,7 +164,6 @@ data "aws_iam_policy_document" "gha_eks_permissions" {
     actions = [
       "iam:CreateRole",
       "iam:DeleteRole",
-      "iam:GetRole",
       "iam:TagRole",
       "iam:UntagRole",
       "iam:ListRolePolicies",
@@ -180,14 +179,23 @@ data "aws_iam_policy_document" "gha_eks_permissions" {
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/quickdraw-ephemeral*"]
   }
 
-  # `enable_cluster_creator_admin_permissions` resolves the caller (this very role) via
-  # aws_iam_session_context, which calls iam:GetRole on the assumed role — i.e. on gha-eks
-  # itself. Read-only, and kept OUT of the manage-roles statement above so gha-eks can
-  # *read* but never *modify or delete* itself.
+  # iam:GetRole is read-only, and several steps need it on roles OUTSIDE the ephemeral
+  # prefix: aws_iam_session_context reads gha-eks itself, and EKS CreateNodegroup validates
+  # the AWSServiceRoleForAmazonEKSNodegroup service-linked role. Grant GetRole broadly (it
+  # only reveals role metadata) while every *mutating* IAM action stays scoped to
+  # role/quickdraw-ephemeral* above.
   statement {
-    sid       = "ReadOwnRoleForSessionContext"
+    sid       = "ReadRoleMetadata"
     actions   = ["iam:GetRole"]
-    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/gha-eks"]
+    resources = ["*"]
+  }
+
+  # The managed node group resolves the EKS-optimized AMI version from AWS's public SSM
+  # parameters (/aws/service/eks/optimized-ami/...) — read-only, and only that path.
+  statement {
+    sid       = "ReadEksOptimizedAmiSsm"
+    actions   = ["ssm:GetParameter", "ssm:GetParameters"]
+    resources = ["arn:aws:ssm:${var.aws_region}::parameter/aws/service/eks/*"]
   }
 
   # The cluster's IRSA OIDC provider (per-cluster, name not predictable) + the
