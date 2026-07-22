@@ -1,6 +1,6 @@
 # EKS module v21 (the first major to support AWS provider 6). Nodes run in the private
-# subnets; one managed node group on SPOT instances — the demo tolerates interruption,
-# and spot is a large cost saving on an already credit-funded account.
+# subnets; one managed node group of Graviton (arm64) on-demand instances — see the
+# node-group block for why arm64 and why on-demand rather than spot.
 #
 # endpoint_public_access = true so the GitHub Actions runner (outside the VPC) can reach
 # the API server to run kubectl/helm. The cluster is short-lived and auth still gates
@@ -32,11 +32,23 @@ module "eks" {
   # under `quickdraw-ephemeral*`, which is exactly what the gha-eks IAM policy is scoped to.
   eks_managed_node_groups = {
     "${var.cluster_name}-ng" = {
+      # Graviton (arm64) on purpose: the serving image is built single-platform
+      # linux/arm64 to match the Lambda tier, so the pods only run on arm64 hardware.
+      # t4g is the free-plan-eligible Graviton family; picking an x86 type (t3.small)
+      # would boot but then fail to run the arm64 pod (exec format error). ami_type must
+      # be set explicitly — the module defaults to x86_64 and does not infer it.
+      ami_type       = "AL2023_ARM_64_STANDARD"
       instance_types = var.node_instance_types
-      capacity_type  = "SPOT"
-      min_size       = var.node_min_size
-      max_size       = var.node_max_size
-      desired_size   = var.node_desired_size
+
+      # On-demand, not spot: on the post-July-2025 free plan the eligible types (incl.
+      # t4g.small) are free-tier On-Demand for 6 months, so on-demand is the actually-
+      # free path; spot would bill spot price against credits for no benefit. Launching
+      # any of these still needs a vCPU service-quota increase (default is 1) — see MEMORY.
+      capacity_type = "ON_DEMAND"
+
+      min_size     = var.node_min_size
+      max_size     = var.node_max_size
+      desired_size = var.node_desired_size
     }
   }
 }

@@ -340,6 +340,15 @@ and destroyed automatically, at ~$0 idle cost.
 1. **Terraform `infra/ephemeral`:** `terraform-aws-modules/vpc` (2 AZ, single NAT) +
    `terraform-aws-modules/eks` (K8s 1.31+, one managed node group: 2× t3.medium **spot**).
    Separate state key. Everything tagged `project=mlops-quickdraw`, `tier=ephemeral`.
+
+   > **Amended 2026-07-22 (node group → Graviton on-demand):** the first real apply proved
+   > `t3.medium spot` unusable on the free plan for three compounding reasons (LEARNING.md
+   > 2026-07-22): `t3.medium` isn't free-tier-eligible; every *eligible* type is ≥2 vCPU while
+   > new accounts default to a **1-vCPU** quota (needs a one-time Service Quotas bump); and the
+   > serving image is arm64-only, so nodes must be Graviton. Node group is now **2× `t4g.small`
+   > Graviton (arm64) on-demand** (`ami_type=AL2023_ARM_64_STANDARD`) — arch-matched to the
+   > image, free-plan-eligible, 2 GB/node. On-demand (not spot) because these types are free
+   > *on-demand* on the new plan. This stays on the free plan; no paid upgrade (Task 0 note).
 2. **Helm chart** `deploy/helm/quickdraw-api`: Deployment (image from ECR by digest), probes
    wired to `/healthz`, resource requests/limits, Service (ClusterIP), optional HPA;
    `values.yaml` toggle for LoadBalancer (documented, not used in the weekly run).

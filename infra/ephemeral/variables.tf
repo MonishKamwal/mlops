@@ -23,9 +23,9 @@ variable "vpc_cidr" {
 }
 
 variable "node_instance_types" {
-  description = "Instance types for the managed node group. Spot-priced (see eks.tf)."
+  description = "Instance types for the managed node group. Graviton/arm64 (t4g) to match the arm64 serving image and stay free-plan-eligible; on-demand (see eks.tf)."
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t4g.small"]
 }
 
 variable "node_desired_size" {
