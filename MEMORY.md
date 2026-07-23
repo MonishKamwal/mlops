@@ -70,8 +70,22 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop, later³)** — **Phase 4 task 2 COMPLETE — drift workflow + hub
+  wiring** (branch `phase4-drift-workflow`, PR pending; module PR #32 merged first). New
+  `drift-report.yml` (weekly Mon 07:00 UTC + dispatch): OIDC `gha-app` → `dvc pull` the reference
+  → `aws s3 sync` the 30-day log window from the logs bucket → run `quickdraw.monitoring.drift`
+  (+ `--history` trend) → publish `drift.json`/`drift.html`/`drift_history.json` to
+  `s3://<data-bucket>/monitoring/`. `evidence-pages.yml` now also triggers on "Drift report" and
+  pulls those into `_site/` (hub serves `/mlops/drift.json` etc.). **No IAM change** — `gha-app`
+  already reads the logs bucket + reads/writes the data bucket (iam.tf 45-55). Added trend logic
+  to the module (`append_history`, idempotent same-day overwrite) + 2 tests (138 total), ruff +
+  check-yaml clean; history CLI verified end-to-end. **ONE admin prereq before it can run:** Monish
+  adds repo variable **`PREDICTION_LOG_BUCKET` = `mlops-quickdraw-logs-ab1b`** (GitHub UI →
+  Settings → Secrets and variables → Actions → Variables). Also assumes the reference is in the DVC
+  remote (train-deploy pushed it after #30). Untestable locally (needs S3/OIDC) → first real run is
+  a dispatch.
 - **2026-07-23 (personal laptop, later²)** — **Phase 4 task 2 (drift MODULE) built** (branch
-  `phase4-drift-report`, PR pending). `quickdraw.monitoring.drift` + `.schema`: prediction-log
+  `phase4-drift-report`, merged PR #32). `quickdraw.monitoring.drift` + `.schema`: prediction-log
   NDJSON → dataframe (`records_to_frame`, pure) → Pandera-validated current window
   (`validate_current`; loud on empty/bad data) → **Evidently 0.7.21** drift vs the reference →
   **`drift.json`** data contract (per-column `{method, score, threshold, drifted}` + self-computed
@@ -628,23 +642,23 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phases 1–3 COMPLETE and proven on real clusters; Phase 4 (drift + polish) underway.** Phase 3's
-full ephemeral-EKS lifecycle runs green (apply → 3× `t4g.small` Graviton → CNI-before-compute →
-API + kube-prometheus-stack → k6 → Grafana dashboard captured under load → `if:always()` destroy;
-only the DoD "two consecutive *scheduled* cron runs" remains, automatic). **Phase 4 task 1 (drift
-reference) built** (branch `phase4-drift-reference`, PR pending) — see progress log. Next:
+**Phases 1–3 COMPLETE and proven on real clusters; Phase 4 (drift + polish) underway — tasks 1 &
+2 done.** Phase 3's full ephemeral-EKS lifecycle runs green (only the DoD "two consecutive
+scheduled cron runs" remains, automatic). Phase 4: task 1 (drift reference) merged (#30); task 2
+(drift report) — module merged (#32), **workflow + hub PR pending** (branch `phase4-drift-workflow`).
+Next:
 
-1. **Merge task 1**, then **task 2 — `drift-report.yml`** (weekly + dispatch): pull prediction
-   logs from S3 (`predictions/dt=…`) → build a current-window dataframe with the SAME columns as
-   the reference (predicted_label, confidence, margin) → Pandera-validate → **Evidently**
-   prediction-drift vs `reports/monitoring/reference.csv` → emit **`drift.json`** (data contract,
-   [[public-facing-data-contract]]) + functional HTML → evidence hub, plus a drift-over-weeks
-   trend. Evidently dep gets added here (monitoring group). Note the model-segmentation nuance:
-   logs carry `model_sha256`; compare like-model logs vs the reference (champion rarely moves).
-2. **Then tasks 3–7** (PLAN §5 Phase 4): feedback 👍/👎 signal, drift-threshold GitHub issue,
-   documented retrain path, portfolio polish, final cost review.
-3. **Housekeeping (anytime):** link the eks-demo run page + Grafana PNG from the hub; the 5xx
-   dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); Node-20 workflow actions.
+1. **Merge the drift-workflow PR + do the ONE admin prereq:** Monish adds repo variable
+   **`PREDICTION_LOG_BUCKET` = `mlops-quickdraw-logs-ab1b`** (GitHub UI → Settings → Secrets and
+   variables → Actions → Variables). Then **dispatch `Drift report`** — the first real run over
+   actual visitor logs. Expect confidence/margin drifted (real doodles are OOD, lower confidence)
+   → `drift.json` + trend published to the hub. (If `dvc pull` of the reference fails, a
+   train-deploy needs to have pushed it — it did after #30.)
+2. **Tasks 3–7** (PLAN §5 Phase 4): feedback 👍/👎 signal (portfolio canvas → S3 → proxy-accuracy),
+   drift-threshold GitHub issue (alerting-lite), documented retrain path, portfolio polish, final
+   cost review. Feedback signal needs a portfolio-repo change + a serving/log tweak.
+3. **Housekeeping (anytime):** link the eks-demo run page + Grafana PNG + drift.json from the hub;
+   the 5xx dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); Node-20 actions.
 **Phase 2 complete; Phase 3 (ephemeral EKS) — all build tasks (1–5) DONE and proven on a real
 cluster.** The full lifecycle runs green: apply → 3× `t4g.small` Ready → kube-prometheus-stack →
 API (arm64 pod per node) → smoke → k6 → Grafana dashboard captured under load → `if: always()`

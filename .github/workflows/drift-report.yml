@@ -1,0 +1,97 @@
+# Weekly prediction-drift report (PLAN.md §5 Phase 4, task 2).
+#
+# Pulls the real prediction logs from S3, compares the model's *live* output distribution
+# against the frozen reference (quickdraw.monitoring.reference), and publishes drift.json (the
+# data contract the portfolio site renders) + Evidently HTML + a drift-over-weeks trend to the
+# evidence bucket. Real visitor doodles are out-of-distribution, so confidence/margin drift down.
+name: Drift report
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # 07:00 UTC every Monday
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC assume-role (read logs + DVC reference, write the evidence bucket)
+  contents: read
+
+# One drift run at a time — the trend history is read-modify-write on a single S3 object.
+concurrency:
+  group: drift-report
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  LOGS_BUCKET: ${{ vars.PREDICTION_LOG_BUCKET }}
+  DATA_BUCKET: ${{ vars.MLFLOW_STATE_BUCKET }} # mlflow + DVC + monitoring artifacts live here
+  WINDOW_DAYS: "30"
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.GHA_APP_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The reference is a DVC out pushed by train-deploy; it must reflect the deployed model.
+      - name: Pull the drift reference (DVC)
+        run: uv run dvc pull reports/monitoring/reference.csv
+
+      # Logs are Hive-partitioned predictions/dt=YYYY-MM-DD/. Copy the window's partitions
+      # (some days may be empty — visitors are sparse — so each copy is best-effort).
+      - name: Sync the last ${{ env.WINDOW_DAYS }} days of prediction logs
+        run: |
+          set -euo pipefail
+          mkdir -p live-logs
+          for i in $(seq 0 $((WINDOW_DAYS - 1))); do
+            day=$(date -u -d "-$i day" +%Y-%m-%d)
+            aws s3 cp "s3://$LOGS_BUCKET/predictions/dt=$day/" "live-logs/dt=$day/" \
+              --recursive --no-progress 2>/dev/null || true
+          done
+          echo "synced $(find live-logs -name '*.jsonl' | wc -l) log objects"
+
+      - name: Pull existing drift history (best-effort)
+        run: |
+          aws s3 cp "s3://$DATA_BUCKET/monitoring/drift_history.json" drift_history.json \
+            --no-progress 2>/dev/null || echo "no history yet — starting fresh"
+
+      - name: Build the drift report
+        run: |
+          uv run python -m quickdraw.monitoring.drift \
+            --current-dir live-logs \
+            --out-json drift.json \
+            --out-html drift.html \
+            --history drift_history.json
+
+      # Publish the data contract + HTML + trend to the evidence bucket; evidence-pages.yml
+      # pulls them into the hub on its next build (triggered by this workflow completing).
+      - name: Publish to the evidence bucket
+        run: |
+          set -euo pipefail
+          for f in drift.json drift.html drift_history.json; do
+            aws s3 cp "$f" "s3://$DATA_BUCKET/monitoring/$f" --no-progress
+          done
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: |
+            drift.json
+            drift.html
+            drift_history.json
+          if-no-files-found: warn
