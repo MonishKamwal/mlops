@@ -70,6 +70,18 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop, later)** — **Grafana/Prometheus data contract** (branch
+  `phase4-metrics-contract`, PR pending) — Monish's ask: make all public-facing artifacts
+  (Prometheus, Grafana, Evidently) customizable in looks so he styles them in the portfolio
+  repo (see [[public-facing-data-contract]]). The eks-demo run now emits **`api-metrics.json`** —
+  the raw metric *series* behind the dashboard panels (RPS, latency p50/p90/p95/p99, error rate,
+  requests-by-status, node CPU/mem) via Prometheus `query_range`
+  (`scripts/capture_prometheus_metrics.py`, **stdlib-only** since the runner has no `uv sync`).
+  The site renders its own styled charts from that; the Grafana PNG is demoted to a dev artifact.
+  Best-effort per query (a bad metric → `{error, series:[]}`, never sinks the rest). 3 new tests
+  (133 total), ruff clean, `capture()` envelope smoke-tested. Task 1 (reference) merged as PR #30
+  (Monish resolved a MEMORY.md conflict — now basing branches off latest main, see
+  [[base-work-on-latest-main]]). Evidently `drift.json` (task 2) follows the same contract.
 - **2026-07-23 (personal laptop)** — **Phase 4 STARTED — task 1 (drift reference) built**
   (branch `phase4-drift-reference`, PR pending). Design call that shapes the phase: the
   prediction logs are privacy-first (store `input_sha256`, not pixels/strokes), so drift is on
