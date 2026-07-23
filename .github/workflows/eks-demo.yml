@@ -81,12 +81,32 @@ jobs:
           echo "digest=${uri##*@}" >> "$GITHUB_OUTPUT"
           echo "Deploying image digest ${uri##*@}"
 
+      # Install the monitoring stack BEFORE the API so its ServiceMonitor CRD exists when
+      # the API chart renders with serviceMonitor.enabled=true. Values are trimmed for the
+      # 3x t4g.small nodes (deploy/prometheus/values.yaml). The API dashboard is provisioned
+      # as code: a labeled ConfigMap the Grafana sidecar auto-imports (searchNamespace: ALL).
+      - name: Install kube-prometheus-stack + provision the API dashboard
+        run: |
+          set -euo pipefail
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+            --namespace monitoring --create-namespace \
+            -f deploy/prometheus/values.yaml \
+            --wait --timeout 12m
+          kubectl -n monitoring create configmap quickdraw-api-dashboard \
+            --from-file=deploy/grafana/dashboards/quickdraw-api.json \
+            --dry-run=client -o yaml \
+            | kubectl label --local -f - -o yaml grafana_dashboard=1 \
+            | kubectl apply -f -
+
       - name: Deploy with Helm
         run: |
           helm upgrade --install "$RELEASE" deploy/helm/quickdraw-api \
             --namespace "$NAMESPACE" --create-namespace \
             --set fullnameOverride="$RELEASE" \
             --set image.digest=${{ steps.image.outputs.digest }} \
+            --set serviceMonitor.enabled=true \
             --wait --timeout 5m
 
       - name: Smoke test (via port-forward)
@@ -111,10 +131,33 @@ jobs:
           K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=eks-evidence/k6-report.html \
             k6 run deploy/k6/predict.js -e TARGET=http://localhost:8080
 
+      # Best-effort (never fails the run): the k6 window just happened, so from=now-15m on the
+      # dashboards shows the load spike. Prometheus targets prove the API ServiceMonitor is
+      # actually scraped (health=up); the Grafana PNG is the money shot (needs the image
+      # renderer). A renderer hiccup on the small nodes loses the PNG, not the run.
+      - name: Capture monitoring evidence (Grafana PNG + Prometheus targets)
+        if: always()
+        run: |
+          set +e
+          mkdir -p eks-evidence
+          kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090 >/dev/null 2>&1 &
+          pp=$!
+          sleep 5
+          curl -fsS "http://localhost:9090/api/v1/targets?state=active" -o eks-evidence/prometheus-targets.json
+          kill $pp 2>/dev/null
+          kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80 >/dev/null 2>&1 &
+          gp=$!
+          sleep 5
+          curl -fsS "http://admin:prom-operator@localhost:3000/render/d/quickdraw-api/quickdraw-api?orgId=1&from=now-15m&to=now&width=1600&height=900&kiosk" \
+            -o eks-evidence/grafana-quickdraw-api.png
+          kill $gp 2>/dev/null
+          echo "monitoring evidence capture done (best-effort)"
+
       - name: Capture cluster evidence
         if: always()
         run: |
           mkdir -p eks-evidence
+          kubectl get pods -n monitoring -o wide > eks-evidence/monitoring-pods.txt 2>&1 || true
           # Node-level diagnostics first — on an apply failure these are the whole point:
           # `describe nodes` shows the NotReady conditions/taints, and the aws-node logs show
           # why the CNI didn't come up. On a healthy run they're just extra evidence.

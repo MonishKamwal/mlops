@@ -70,6 +70,23 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-22 (personal laptop, later³)** — **Phase 3 task 5 (observability) built**
+  (branch `phase3-observability`, PR pending). kube-prometheus-stack installed per run before
+  the API (so the ServiceMonitor CRD exists), trimmed for the small nodes
+  (`deploy/prometheus/values.yaml`: Alertmanager off, 2h in-memory retention,
+  `serviceMonitorSelectorNilUsesHelmValues: false` so our chart's ServiceMonitor — which lacks
+  the stack's release label — is actually scraped; image-renderer on). API deploy now sets
+  `serviceMonitor.enabled=true`. Dashboards-as-code: hand-authored API dashboard
+  (`deploy/grafana/dashboards/quickdraw-api.json` → RPS, latency percentiles, error rate,
+  requests-by-status) imported via a labeled ConfigMap the Grafana sidecar picks up; cluster
+  view uses the stack's bundled node dashboards. Workflow captures Prometheus targets + a
+  Grafana PNG **best-effort** (a renderer hiccup won't red the run). **Node group bumped 2 → 3
+  `t4g.small`** for headroom. Dropped the planned in-flight panel: the instrumentator's
+  inprogress gauge ignores its `registry=` arg and collides on the global registry (see
+  LEARNING) — not worth a serving-image rebuild. Validated locally: `helm template` of both
+  charts (kube-prometheus-stack renders `serviceMonitorSelector: {}`, Alertmanager gone,
+  renderer present), API chart renders the ServiceMonitor, `terraform validate`, `check-yaml`,
+  113 serving tests green (`app.py` untouched). **Not applied** — needs a cluster dispatch.
 - **2026-07-22 (personal laptop, later²)** — **First fully-green `eks-demo` run — Phase 3
   tasks 1–4 proven on a real cluster.** With PR #26 (CNI `before_compute`) merged, run
   29936256948 went green end-to-end (25m20s): `terraform apply` → **2× `t4g.small` nodes
@@ -565,13 +582,17 @@ clean. The wall-by-wall path that got here: IAM (PR #24/#25) → `t3.medium` ine
 Graviton (PR #25) → CNI unmanaged/NotReady → `addons` before_compute (PR #26). vCPU quota is a
 non-issue (account at **16**). Next:
 
-1. **Task 5 — observability** (the last build task): kube-prometheus-stack via Helm at run start,
-   `serviceMonitor.enabled=true` in the API chart → Prometheus scrapes `/metrics`, Grafana
-   dashboards-as-code (`deploy/grafana/dashboards/`), capture PNGs under k6 load → evidence hub.
-   Watch RAM: 2× `t4g.small` = 4 GB total; the stack may need `desired_size` 3 and/or tuned
-   Prometheus requests/retention. This is the natural next branch.
+1. **Merge Task 5** (`phase3-observability`, PR pending) and **dispatch `eks-demo`** to prove it
+   on a cluster (all validated locally, but the monitoring stack fitting on 3× `t4g.small`,
+   the ServiceMonitor actually being scraped, the sidecar importing the dashboard, and the PNG
+   renderer are only testable on a real run). What to check in the run/evidence: apply brings up
+   **3 nodes**; `prometheus-targets.json` shows the `quickdraw-api` target `health: up`;
+   `grafana-quickdraw-api.png` rendered (best-effort — its absence isn't a failure); stack pods
+   in `monitoring-pods.txt` all Running (watch for OOM/Pending → may need to trim further). Task 5
+   changes are infra/workflow only (`app.py` untouched), so merging it does **not** trigger
+   train-deploy.
 2. **Phase 3 DoD tail:** need **two consecutive *scheduled* runs** green (so far: one manual
-   dispatch). The monthly cron will supply these over time, or dispatch again to confirm stability.
+   dispatch, pre-monitoring). The monthly cron supplies these over time, or dispatch again.
 3. **Housekeeping (anytime):** the eks-demo run page is public evidence — link it from the hub;
    several workflow actions still target Node 20 (forced to 24).
 

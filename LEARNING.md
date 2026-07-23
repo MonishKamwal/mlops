@@ -4,6 +4,29 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-22 — Wiring the monitoring stack: two silent gotchas (scrape selection + a library registry bug)
+
+- **kube-prometheus-stack ignores "foreign" ServiceMonitors by default.** The Prometheus
+  operator only selects ServiceMonitors that carry the stack's own `release` label — so our
+  `quickdraw-api` chart's ServiceMonitor would be silently *not scraped*, no error, just a
+  missing target. Two fixes: add the `release: <stack>` label to our monitor (couples our
+  chart to the stack's release name), or set `serviceMonitorSelectorNilUsesHelmValues: false`
+  in the stack's values, which renders `serviceMonitorSelector: {}` on the Prometheus CR =
+  "select all". Took the latter to keep the API chart decoupled. Verified locally with
+  `helm template ... | grep serviceMonitorSelector` before ever touching a cluster — value
+  toggles like this don't show up literally, so check the *rendered CR field*, not the flag.
+- **`prometheus-fastapi-instrumentator`'s in-progress gauge ignores the custom registry.**
+  Wanted the plan's in-flight-requests panel, which needs `should_instrument_requests_inprogress
+  =True`. But that gauge collides ("Duplicated timeseries in CollectorRegistry") the moment a
+  second app is built in-process — which the test suite does constantly. `Instrumentator` takes
+  a `registry=` arg that should isolate it, but reading the lib source (middleware.py) the
+  inprogress `Gauge(...)` is created with **no `registry=`**, so it always lands on the global
+  default `REGISTRY` regardless. So the arg can't fix it; you'd need a custom gauge or a
+  test-registry reset. Not worth it for one panel that would also have coupled Task 5 to a
+  serving-image rebuild — dropped it for a "requests by status" panel off the metrics the app
+  already emits. Lesson: when a library arg "should" fix something and doesn't, read the source
+  before building scaffolding around it — the fix may be one it structurally can't apply.
+
 ## 2026-07-22 — "Unhealthy nodes": nodes join but stay NotReady when the CNI isn't managed
 
 - With the instance-type wall cleared (`t4g.small` Graviton), the first apply got *further* and
