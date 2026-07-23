@@ -391,6 +391,13 @@ and destroyed automatically, at ~$0 idle cost.
    > collides on the global registry (LEARNING 2026-07-22), and adding it would have coupled
    > this task to a serving-image rebuild. PNG capture + Prometheus-targets are **best-effort**
    > so a renderer hiccup on the 2 GB nodes never reds the run.
+   >
+   > **Amended 2026-07-23 (data contract):** the run also emits **`api-metrics.json`** — the
+   > raw metric *series* behind the panels (RPS, latency percentiles, error rate, by-status,
+   > node CPU/mem) via Prometheus `query_range` (`scripts/capture_prometheus_metrics.py`,
+   > stdlib-only). That's the public **data contract** the portfolio site restyles; the Grafana
+   > PNG is demoted to a dev artifact. Same principle governs Evidently in Phase 4
+   > (`drift.json`) — public artifacts ship data, not baked visuals.
 
 **Tools introduced:** Terraform AWS modules, EKS, Helm, k6, Prometheus + Grafana
 (kube-prometheus-stack).

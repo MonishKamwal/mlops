@@ -133,9 +133,11 @@ jobs:
 
       # Best-effort (never fails the run): the k6 window just happened, so from=now-15m on the
       # dashboards shows the load spike. Prometheus targets prove the API ServiceMonitor is
-      # actually scraped (health=up); the Grafana PNG is the money shot (needs the image
-      # renderer). A renderer hiccup on the small nodes loses the PNG, not the run.
-      - name: Capture monitoring evidence (Grafana PNG + Prometheus targets)
+      # actually scraped (health=up). api-metrics.json is the DATA CONTRACT — the raw metric
+      # series behind the panels (RPS, latency percentiles, error rate, by-status, node CPU/mem)
+      # so the portfolio site renders its own styled charts; the Grafana PNG is now just a dev
+      # artifact. A renderer hiccup on the small nodes loses the PNG, not the run.
+      - name: Capture monitoring evidence (metric-series data contract + PNG)
         if: always()
         run: |
           set +e
@@ -144,6 +146,7 @@ jobs:
           pp=$!
           sleep 5
           curl -fsS "http://localhost:9090/api/v1/targets?state=active" -o eks-evidence/prometheus-targets.json
+          python3 scripts/capture_prometheus_metrics.py --minutes 15 --out eks-evidence/api-metrics.json
           kill $pp 2>/dev/null
           kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80 >/dev/null 2>&1 &
           gp=$!
