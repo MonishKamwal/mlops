@@ -70,6 +70,20 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop, later⁷)** — **Phase 4 task 3 BACKEND built** (branch
+  `phase4-feedback-backend`, PR pending). The feedback signal spans both repos; this is the
+  mlops half. `POST /feedback` on the serving app + `serving/feedback_log.py` (mirrors
+  `prediction_log.py`: one JSONL to `feedback/dt=…/`, fail-open, env-switched on the shared
+  `PREDICTION_LOG_BUCKET`, lazy boto3). **Design: self-contained event** — client sends the
+  prediction context it already holds (`{predicted_label, confidence, correct, source,
+  model_sha256}`), no prediction id, no join to prediction logs; proxy-accuracy only needs
+  `correct`. Endpoint returns 204; rejects unknown labels (404) + out-of-range confidence (422)
+  so bad data stays out of per-class accuracy. Terraform: broadened the Lambda exec `PutObject`
+  to `feedback/*` (append-only; **needs `terraform apply`**). CORS unchanged (per-Function-URL).
+  9 new tests (147 total), ruff + tf validate clean, torch-free serving guard holds. **Admin
+  after merge: `terraform apply` (persistent) + redeploy the Lambda image** so `/feedback` goes
+  live before the frontend points at it. NEXT: frontend PR (portfolio repo — `lib/predict.ts`
+  `sendFeedback` + 👍/👎 in `SketchDemo.tsx`), then drift-report proxy-accuracy.
 - **2026-07-23 (personal laptop, later⁶)** — **Phase 4 task 2 WORKING end-to-end — first real
   drift report.** PR #35 merged; re-dispatched Train & Deploy (publishes reference to the stable
   key) then Drift report (run 30046838926, success, 1m14s). `drift.json` on real logs: **10 live
@@ -673,17 +687,18 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phases 1–3 COMPLETE; Phase 4 tasks 1 & 2 DONE and working end-to-end** (drift report run
-30046838926 produced real `drift.json`: live confidence 0.832 < reference 0.909, all published to
-the hub). Phase 3's full ephemeral-EKS lifecycle runs green (only DoD "two consecutive scheduled
-cron runs" remains, automatic). Next:
+**Phases 1–3 COMPLETE; Phase 4 tasks 1 & 2 DONE (drift report working end-to-end, real
+`drift.json` on the hub — live confidence 0.832 < reference 0.909); task 3 (feedback signal)
+UNDERWAY.** Next:
 
-1. **Task 3 — feedback signal** (PLAN §5): portfolio canvas gets 👍/👎 "did I guess right?" →
-   logged to S3 → weekly proxy-accuracy chart joins the drift report. **Touches the portfolio repo
-   (`monishkamwal.github.io`) too** — a UI control + a POST — plus a serving/log path to persist the
-   verdict. Scope it across both repos before building.
-2. **Tasks 4–7** (PLAN §5): drift-threshold GitHub issue (alerting-lite), documented retrain path,
-   portfolio polish, final cost review.
+1. **Task 3 — feedback signal (spans both repos), backend done:** mlops `POST /feedback` +
+   `feedback_log.py` + IAM built (branch `phase4-feedback-backend`, PR pending). **Admin after
+   merge: `terraform apply` (persistent) + redeploy the Lambda image** so `/feedback` is live.
+   Then the **frontend PR** (portfolio repo: `lib/predict.ts` `sendFeedback` + 👍/👎 in
+   `SketchDemo.tsx`, structural styling only — Monish polishes), then **drift-report
+   proxy-accuracy** (sync `feedback/`, correct-rate → `feedback.json` data contract → hub).
+2. **Tasks 4–7** (PLAN §5): drift-threshold GitHub issue (alerting-lite), documented retrain
+   path, portfolio polish, final cost review.
 3. **Phase 3 DoD tail (automatic):** two consecutive *scheduled* cron runs green — the monthly
    cron (1st, 06:00 UTC) supplies these; nothing to build.
 

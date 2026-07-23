@@ -6,6 +6,8 @@
   That shared code path is the project's no-train/serve-skew rule made concrete.
   With ``PREDICTION_LOG_BUCKET`` set, every prediction also writes one JSONL record
   to S3 (:mod:`quickdraw.serving.prediction_log` — digest, top-3, latency; no PII).
+- ``POST /feedback`` — a visitor's 👍/👎 on a prediction (Phase 4, task 3); writes one
+  JSONL record to S3 (:mod:`quickdraw.serving.feedback_log`) for the proxy-accuracy signal.
 - ``GET /healthz`` — readiness: the Lambda Web Adapter polls it before forwarding
   traffic; EKS probes reuse it in Phase 3.
 - ``GET /model-info`` — which model is loaded (classes, val_accuracy, sha256).
@@ -32,9 +34,10 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from quickdraw.data.preprocess import png_to_model_input, strokes_to_model_input
+from quickdraw.serving.feedback_log import FeedbackLog, feedback_log_from_env
 from quickdraw.serving.prediction_log import PredictionLog, prediction_log_from_env
 from quickdraw.serving.predictor import Predictor
 
@@ -71,8 +74,26 @@ class ModelInfo(BaseModel):
     service_version: str
 
 
+class FeedbackRequest(BaseModel):
+    """A visitor's 👍/👎 on a prediction — the context the client already holds.
+
+    Self-contained by design (see feedback_log): no prediction id, no join back to the
+    prediction logs. ``correct`` is the whole signal; the rest lets proxy-accuracy be
+    sliced by class/model. ``model_sha256`` is optional — the client gets it from
+    ``/model-info`` and may not always have it.
+    """
+
+    predicted_label: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    correct: bool
+    source: Literal["strokes", "png"] = "strokes"
+    model_sha256: str = ""
+
+
 def create_app(
-    model_path: Path | None = None, prediction_log: PredictionLog | None = None
+    model_path: Path | None = None,
+    prediction_log: PredictionLog | None = None,
+    feedback_log: FeedbackLog | None = None,
 ) -> FastAPI:
     """Build the app around one model file (env ``MODEL_PATH`` unless overridden).
 
@@ -80,8 +101,8 @@ def create_app(
     safe, and a missing/corrupt model fails the server at startup — loudly, before
     the readiness check ever passes — instead of on the first request.
 
-    ``prediction_log`` is injectable for tests; by default it comes from the
-    environment (``PREDICTION_LOG_BUCKET`` set -> log to S3, unset -> disabled).
+    ``prediction_log``/``feedback_log`` are injectable for tests; by default they come
+    from the environment (``PREDICTION_LOG_BUCKET`` set -> log to S3, unset -> disabled).
     """
     path = Path(model_path or os.environ.get("MODEL_PATH", DEFAULT_MODEL_PATH))
 
@@ -89,6 +110,7 @@ def create_app(
     async def lifespan(app: FastAPI):
         app.state.predictor = Predictor(path)
         app.state.prediction_log = prediction_log or prediction_log_from_env()
+        app.state.feedback_log = feedback_log or feedback_log_from_env()
         yield
 
     app = FastAPI(title="QuickDraw sketch classifier", lifespan=lifespan)
@@ -149,6 +171,27 @@ def create_app(
             predictions=[Prediction(label=label, probability=p) for label, p in ranked],
             source=source,
         )
+
+    @app.post("/feedback", status_code=204)
+    def feedback(request: FeedbackRequest) -> None:
+        # Reject a label the model can't produce: it would only be a client bug or noise,
+        # and it would pollute the per-class proxy-accuracy. 404 keeps bad data out.
+        predictor: Predictor = app.state.predictor
+        if request.predicted_label not in predictor.classes:
+            raise HTTPException(
+                status_code=404, detail=f"unknown label {request.predicted_label!r}"
+            )
+
+        log: FeedbackLog | None = app.state.feedback_log
+        if log is not None:
+            log.log(
+                predicted_label=request.predicted_label,
+                confidence=request.confidence,
+                correct=request.correct,
+                source=request.source,
+                model_sha256=request.model_sha256 or predictor.model_sha256,
+                service_version=version("quickdraw"),
+            )
 
     return app
 

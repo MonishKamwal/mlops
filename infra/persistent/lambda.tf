@@ -29,14 +29,17 @@ resource "aws_iam_role_policy_attachment" "api_exec_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Prediction logging (task 6) is append-only by construction: PutObject on the
-# predictions/ prefix and nothing else — the API can't read, list, or delete
-# what it wrote, and can't touch anything else in the bucket.
+# Prediction + feedback logging is append-only by construction: PutObject on the
+# predictions/ and feedback/ prefixes and nothing else — the API can't read, list, or
+# delete what it wrote, and can't touch anything else in the bucket.
 data "aws_iam_policy_document" "api_prediction_logs" {
   statement {
-    effect    = "Allow"
-    actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.logs.arn}/predictions/*"]
+    effect  = "Allow"
+    actions = ["s3:PutObject"]
+    resources = [
+      "${aws_s3_bucket.logs.arn}/predictions/*",
+      "${aws_s3_bucket.logs.arn}/feedback/*",
+    ]
   }
 }
 
