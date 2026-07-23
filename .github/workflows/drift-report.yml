@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write # OIDC assume-role (read logs + DVC reference, write the evidence bucket)
+  id-token: write # OIDC assume-role (read logs + reference, write the evidence bucket)
   contents: read
 
 # One drift run at a time — the trend history is read-modify-write on a single S3 object.
@@ -46,9 +46,13 @@ jobs:
           role-to-assume: ${{ vars.GHA_APP_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # The reference is a DVC out pushed by train-deploy; it must reflect the deployed model.
-      - name: Pull the drift reference (DVC)
-        run: uv run dvc pull reports/monitoring/reference.csv
+      # Read the reference from the stable path train-deploy publishes it to (not `dvc pull`:
+      # the committed lockfile md5 never matches CI-regenerated artifacts). It reflects the
+      # last-trained model. Fails loudly if absent — a train-deploy must have run first.
+      - name: Fetch the drift reference
+        run: |
+          mkdir -p reports/monitoring
+          aws s3 cp "s3://$DATA_BUCKET/monitoring/reference.csv" reports/monitoring/reference.csv --no-progress
 
       # Logs are Hive-partitioned predictions/dt=YYYY-MM-DD/. Copy the window's partitions
       # (some days may be empty — visitors are sparse — so each copy is best-effort).
