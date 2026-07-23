@@ -70,8 +70,18 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop, later⁴)** — **Fix: train-deploy never `dvc push`ed → empty
+  remote.** The first Drift report run (29976492401) **failed** at `dvc pull
+  reports/monitoring/reference.csv` ("Missing cache files … Checkout failed"). Root cause: NO
+  workflow ran `dvc push` — train-deploy only did `dvc pull` (best-effort) + `dvc repro` — so the
+  S3 DVC remote (`s3://mlops-quickdraw-data-ab1b/dvc`) was never populated with derived outs. Fix
+  (branch `phase4-dvc-push`, PR pending): added a **`dvc push`** step in train-deploy.yml right
+  after `dvc repro` (before the gate, so artifacts cache even on a gate-block). Verified: remote =
+  data bucket, `gha-app` has PutObject there, reference is a `dvc repro` out, YAML clean. **To
+  actually populate the remote: dispatch Train & Deploy after merge** (repro + push), THEN
+  re-dispatch Drift report. (Laptop has no AWS creds, so can't `dvc push` locally.)
 - **2026-07-23 (personal laptop, later³)** — **Phase 4 task 2 COMPLETE — drift workflow + hub
-  wiring** (branch `phase4-drift-workflow`, PR pending; module PR #32 merged first). New
+  wiring** (merged PR #33; module PR #32 merged first). New
   `drift-report.yml` (weekly Mon 07:00 UTC + dispatch): OIDC `gha-app` → `dvc pull` the reference
   → `aws s3 sync` the 30-day log window from the logs bucket → run `quickdraw.monitoring.drift`
   (+ `--history` trend) → publish `drift.json`/`drift.html`/`drift_history.json` to
@@ -648,35 +658,19 @@ scheduled cron runs" remains, automatic). Phase 4: task 1 (drift reference) merg
 (drift report) — module merged (#32), **workflow + hub PR pending** (branch `phase4-drift-workflow`).
 Next:
 
-1. **Merge the drift-workflow PR + do the ONE admin prereq:** Monish adds repo variable
-   **`PREDICTION_LOG_BUCKET` = `mlops-quickdraw-logs-ab1b`** (GitHub UI → Settings → Secrets and
-   variables → Actions → Variables). Then **dispatch `Drift report`** — the first real run over
-   actual visitor logs. Expect confidence/margin drifted (real doodles are OOD, lower confidence)
-   → `drift.json` + trend published to the hub. (If `dvc pull` of the reference fails, a
-   train-deploy needs to have pushed it — it did after #30.)
-2. **Tasks 3–7** (PLAN §5 Phase 4): feedback 👍/👎 signal (portfolio canvas → S3 → proxy-accuracy),
-   drift-threshold GitHub issue (alerting-lite), documented retrain path, portfolio polish, final
-   cost review. Feedback signal needs a portfolio-repo change + a serving/log tweak.
-3. **Housekeeping (anytime):** link the eks-demo run page + Grafana PNG + drift.json from the hub;
-   the 5xx dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); Node-20 actions.
-**Phase 2 complete; Phase 3 (ephemeral EKS) — all build tasks (1–5) DONE and proven on a real
-cluster.** The full lifecycle runs green: apply → 3× `t4g.small` Ready → kube-prometheus-stack →
-API (arm64 pod per node) → smoke → k6 → Grafana dashboard captured under load → `if: always()`
-destroy, clean. Proven across runs 29936256948 (tasks 1–4) and 29970873573 (task 5). The
-wall-by-wall path: IAM (PR #24/#25) → `t3.medium` ineligible → `t4g.small` Graviton (PR #25) →
-CNI NotReady → `addons` before_compute (PR #26) → observability (PR #28). Next:
+1. **Unblock the drift report** (`phase4-dvc-push`, PR pending): the first Drift report run
+   FAILED because the DVC remote was empty (no workflow ran `dvc push`). Fix adds `dvc push` to
+   train-deploy after `dvc repro`. **After merge: dispatch `Train & Deploy`** (repro + push
+   populates the remote with `reference.csv` + model outs), THEN **re-dispatch `Drift report`** →
+   first real drift over visitor logs (expect confidence/margin drifted, real doodles are OOD).
+2. **Tasks 3–7** (PLAN §5 Phase 4): feedback 👍/👎 signal (portfolio canvas → S3 → proxy-accuracy;
+   needs a portfolio-repo change + serving/log tweak), drift-threshold GitHub issue
+   (alerting-lite), documented retrain path, portfolio polish, final cost review.
+3. **Phase 3 DoD tail (automatic):** two consecutive *scheduled* cron runs green — the monthly
+   cron (1st, 06:00 UTC) supplies these; nothing to build.
 
-1. **Phase 3 DoD tail (the only thing left in Phase 3):** two consecutive *scheduled* (cron)
-   runs green — so far all runs have been manual dispatches. The monthly cron (1st, 06:00 UTC)
-   supplies these; nothing to build, just let it run (or dispatch again to keep confidence).
-2. **Phase 4 (monitoring/drift + portfolio polish)** is the next build phase — see PLAN.md §5.
-   Real visitor prediction logs have been accruing since Phase 1, so the drift story has data.
-3. **Housekeeping (anytime):** link the eks-demo run page + Grafana PNG from the evidence hub;
-   the 5xx dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); several workflow
-   actions still target Node 20 (forced to 24); style the portfolio evidence section off
-   `evidence.json`.
-
-Watch items: the evidence hub's confusion-matrix PNG is a laptop-era artifact (v1 @
-0.9157) while headline metrics come from the registry (now ~v6, champion still v2 @
-0.9170) — a later refinement could regenerate it from the champion; markdownlint nits in
-PLAN.md/MEMORY.md are known and not CI-checked.
+Housekeeping (anytime): link the eks-demo run page + Grafana PNG + drift.json from the hub; the
+5xx dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); Node-20 workflow actions
+(forced to 24); style the portfolio evidence section off `evidence.json`; the hub's
+confusion-matrix PNG is a laptop-era artifact (v1 @ 0.9157) vs registry champion v2 @ 0.9170;
+markdownlint nits in PLAN.md/MEMORY.md are known and not CI-checked.
