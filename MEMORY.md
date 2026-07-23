@@ -70,6 +70,15 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop, later⁶)** — **Phase 4 task 2 WORKING end-to-end — first real
+  drift report.** PR #35 merged; re-dispatched Train & Deploy (publishes reference to the stable
+  key) then Drift report (run 30046838926, success, 1m14s). `drift.json` on real logs: **10 live
+  vs 15k reference rows, 3/3 columns drifted** — confidence ref mean 0.909 → live **0.832**
+  (Wasserstein 0.44), margin 0.861 → 0.772, predicted_label JS 0.66. The train/serve gap is
+  visible (real doodles less confident), exactly as designed; `drift_history.json` has its first
+  trend point. **Caveat: n=10** (traffic is sparse — mostly self-test draws; umbrella 0.50 = 5/10),
+  so this proves the *pipeline*, not yet a robust *signal* — the weekly cron + more visitor traffic
+  fill it in. Task 2 is done. **NEXT: Phase 4 tasks 3–7** (feedback signal first).
 - **2026-07-23 (personal laptop, later⁵)** — **Real drift fix: publish reference to a stable S3
   path (the `dvc push` fix wasn't enough).** After PR #34 (`dvc push`) merged + a Train & Deploy
   run (30044415424, `dvc push` → "4 files pushed"), the Drift report **still failed** with the same
@@ -664,22 +673,17 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phases 1–3 COMPLETE and proven on real clusters; Phase 4 (drift + polish) underway — tasks 1 &
-2 done.** Phase 3's full ephemeral-EKS lifecycle runs green (only the DoD "two consecutive
-scheduled cron runs" remains, automatic). Phase 4: task 1 (drift reference) merged (#30); task 2
-(drift report) — module merged (#32), **workflow + hub PR pending** (branch `phase4-drift-workflow`).
-Next:
+**Phases 1–3 COMPLETE; Phase 4 tasks 1 & 2 DONE and working end-to-end** (drift report run
+30046838926 produced real `drift.json`: live confidence 0.832 < reference 0.909, all published to
+the hub). Phase 3's full ephemeral-EKS lifecycle runs green (only DoD "two consecutive scheduled
+cron runs" remains, automatic). Next:
 
-1. **Unblock the drift report** (`phase4-publish-reference`, PR pending — supersedes the #34
-   `dvc push` fix, which was necessary but not sufficient; see progress log). Fix: train-deploy
-   publishes `reference.csv` to a stable S3 key `monitoring/reference.csv`; drift report `aws s3
-   cp`s it (not `dvc pull`, whose committed md5 never matches CI-regenerated content). **After
-   merge: re-dispatch `Train & Deploy`** (runs the new publish step), THEN **re-dispatch `Drift
-   report`** → first real drift over visitor logs (expect confidence/margin drifted — real doodles
-   are OOD, lower confidence).
-2. **Tasks 3–7** (PLAN §5 Phase 4): feedback 👍/👎 signal (portfolio canvas → S3 → proxy-accuracy;
-   needs a portfolio-repo change + serving/log tweak), drift-threshold GitHub issue
-   (alerting-lite), documented retrain path, portfolio polish, final cost review.
+1. **Task 3 — feedback signal** (PLAN §5): portfolio canvas gets 👍/👎 "did I guess right?" →
+   logged to S3 → weekly proxy-accuracy chart joins the drift report. **Touches the portfolio repo
+   (`monishkamwal.github.io`) too** — a UI control + a POST — plus a serving/log path to persist the
+   verdict. Scope it across both repos before building.
+2. **Tasks 4–7** (PLAN §5): drift-threshold GitHub issue (alerting-lite), documented retrain path,
+   portfolio polish, final cost review.
 3. **Phase 3 DoD tail (automatic):** two consecutive *scheduled* cron runs green — the monthly
    cron (1st, 06:00 UTC) supplies these; nothing to build.
 
