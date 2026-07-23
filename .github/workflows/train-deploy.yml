@@ -90,6 +90,13 @@ jobs:
       - name: Reproduce the pipeline (download → … → train → evaluate → export)
         run: uv run dvc repro
 
+      # Upload the regenerated DVC outs (processed npz, model, drift reference, …) to the S3
+      # remote so downstream jobs can `dvc pull` them — nothing else pushes, so without this
+      # the remote is empty and e.g. drift-report.yml's pull of reports/monitoring/reference.csv
+      # fails. `raw` is push:false (Google GCS is canonical), so only derived artifacts upload.
+      - name: Push DVC artifacts to S3
+        run: uv run dvc push
+
       # Exits non-zero on a regression, which fails the job here and skips every
       # deploy step below. The metric-diff summary lands in the job summary.
       - name: Quality gate
