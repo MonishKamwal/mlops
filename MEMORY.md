@@ -84,6 +84,15 @@ is the long-term what-and-why; this file is the current state and the exact next
   after merge: `terraform apply` (persistent) + redeploy the Lambda image** so `/feedback` goes
   live before the frontend points at it. NEXT: frontend PR (portfolio repo — `lib/predict.ts`
   `sendFeedback` + 👍/👎 in `SketchDemo.tsx`), then drift-report proxy-accuracy.
+- **2026-07-23 (personal laptop, later⁶)** — **Phase 4 task 2 WORKING end-to-end — first real
+  drift report.** PR #35 merged; re-dispatched Train & Deploy (publishes reference to the stable
+  key) then Drift report (run 30046838926, success, 1m14s). `drift.json` on real logs: **10 live
+  vs 15k reference rows, 3/3 columns drifted** — confidence ref mean 0.909 → live **0.832**
+  (Wasserstein 0.44), margin 0.861 → 0.772, predicted_label JS 0.66. The train/serve gap is
+  visible (real doodles less confident), exactly as designed; `drift_history.json` has its first
+  trend point. **Caveat: n=10** (traffic is sparse — mostly self-test draws; umbrella 0.50 = 5/10),
+  so this proves the *pipeline*, not yet a robust *signal* — the weekly cron + more visitor traffic
+  fill it in. Task 2 is done. **NEXT: Phase 4 tasks 3–7** (feedback signal first).
 - **2026-07-23 (personal laptop, later⁵)** — **Real drift fix: publish reference to a stable S3
   path (the `dvc push` fix wasn't enough).** After PR #34 (`dvc push`) merged + a Train & Deploy
   run (30044415424, `dvc push` → "4 files pushed"), the Drift report **still failed** with the same
@@ -679,7 +688,8 @@ added.
 ## Immediate next step (rolling — keep this precise)
 
 **Phases 1–3 COMPLETE; Phase 4 tasks 1 & 2 DONE (drift report working end-to-end, real
-`drift.json` on the hub); task 3 (feedback signal) UNDERWAY.** Next:
+`drift.json` on the hub — live confidence 0.832 < reference 0.909); task 3 (feedback signal)
+UNDERWAY.** Next:
 
 1. **Task 3 — feedback signal (spans both repos), backend done:** mlops `POST /feedback` +
    `feedback_log.py` + IAM built (branch `phase4-feedback-backend`, PR pending). **Admin after
