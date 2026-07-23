@@ -440,10 +440,13 @@ becomes a complete, navigable story.
    `reference` → `reports/monitoring/reference.csv`): the deployed model's output distribution
    over the held-out test split (predicted class, confidence, margin) — 15k rows, median
    confidence ~0.997. Regenerated whenever the model changes, so it always matches what's live.
-2. **`drift-report.yml` (weekly):** pull prediction logs from S3 → build current-window
-   dataframe (confidence + margin distribution, predicted-class mix, source, latency) →
-   Pandera-validate → Evidently prediction-drift report vs the reference → **`drift.json` data
-   contract** + functional HTML → evidence hub, with a small trend series (drift score over weeks).
+2. **`drift-report.yml` (weekly) — built 2026-07-23.** `quickdraw.monitoring.{drift,schema}`
+   (module PR) + `drift-report.yml` (this PR): OIDC → `dvc pull` the reference → `aws s3 sync`
+   the 30-day log window → Pandera-validate the current frame → Evidently prediction-drift
+   (pinned Wasserstein/Jensen-Shannon distances, not p-values — see LEARNING) → **`drift.json`
+   data contract** (per-column drift + self-computed distributions) + functional HTML +
+   `drift_history.json` (drift-over-weeks trend), published to the evidence bucket and pulled
+   into the hub by `evidence-pages.yml`. Prereq: repo var `PREDICTION_LOG_BUCKET`.
 3. **Feedback signal:** portfolio canvas gets "did I guess right? 👍/👎" → logged to S3 →
    weekly proxy-accuracy chart joins the drift report (real ground-truth-ish labels from real
    users — strong talking point).

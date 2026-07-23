@@ -4,8 +4,44 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quickdraw.monitoring.drift import build_drift, read_ndjson_dir, records_to_frame
+from quickdraw.monitoring.drift import (
+    append_history,
+    build_drift,
+    read_ndjson_dir,
+    records_to_frame,
+)
 from quickdraw.monitoring.schema import validate_current
+
+
+def _contract(date: str, share: float, ref_mean: float, cur_mean: float) -> dict:
+    return {
+        "generated_at": f"{date}T12:00:00+00:00",
+        "window": {"n_reference": 15000, "n_current": 200},
+        "model_sha256": "abc",
+        "dataset_drift": {"drifted_columns": 2, "share": share, "drift_detected": share > 0},
+        "columns": {
+            "confidence": {
+                "distribution": {"reference": {"mean": ref_mean}, "current": {"mean": cur_mean}}
+            }
+        },
+    }
+
+
+def test_append_history_adds_and_sorts() -> None:
+    h1 = append_history(_contract("2026-07-20", 0.33, 0.9, 0.7), [])
+    h2 = append_history(_contract("2026-07-27", 0.67, 0.9, 0.5), h1)
+
+    assert [e["date"] for e in h2] == ["2026-07-20", "2026-07-27"]
+    assert h2[-1]["drift_share"] == 0.67
+    assert h2[-1]["mean_confidence_current"] == 0.5
+
+
+def test_append_history_same_day_overwrites() -> None:
+    existing = append_history(_contract("2026-07-20", 0.33, 0.9, 0.7), [])
+    updated = append_history(_contract("2026-07-20", 0.67, 0.9, 0.4), existing)
+
+    assert len(updated) == 1  # same date replaced, not duplicated
+    assert updated[0]["drift_share"] == 0.67
 
 
 def _record(label: str, p1: float, p2: float, source: str = "strokes") -> dict:

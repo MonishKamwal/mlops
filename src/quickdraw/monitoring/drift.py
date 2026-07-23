@@ -183,6 +183,32 @@ def _dominant_model(current: pd.DataFrame) -> str:
     return str(mode.iloc[0]) if not mode.empty else ""
 
 
+def summarize_for_history(contract: dict[str, Any]) -> dict[str, Any]:
+    """One compact trend point per run — the 'drift over weeks' series the site plots."""
+    conf = contract["columns"]["confidence"]["distribution"]
+    return {
+        "date": contract["generated_at"][:10],
+        "generated_at": contract["generated_at"],
+        "drift_share": contract["dataset_drift"].get("share"),
+        "drifted_columns": contract["dataset_drift"].get("drifted_columns"),
+        "drift_detected": contract["dataset_drift"].get("drift_detected"),
+        "n_current": contract["window"]["n_current"],
+        "mean_confidence_reference": conf["reference"]["mean"],
+        "mean_confidence_current": conf["current"]["mean"],
+        "model_sha256": contract.get("model_sha256", ""),
+    }
+
+
+def append_history(
+    contract: dict[str, Any], existing: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Append this run's trend point; re-running the same day overwrites (idempotent)."""
+    entry = summarize_for_history(contract)
+    history = [h for h in existing if h.get("date") != entry["date"]]
+    history.append(entry)
+    return sorted(history, key=lambda h: h["generated_at"])
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Build the prediction-drift report.")
     parser.add_argument("--reference", type=Path, default=Path("reports/monitoring/reference.csv"))
@@ -191,6 +217,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument("--out-json", type=Path, default=Path("reports/monitoring/drift.json"))
     parser.add_argument("--out-html", type=Path, default=Path("reports/monitoring/drift.html"))
+    parser.add_argument(
+        "--history", type=Path, help="drift_history.json to append this run to (read + rewrite)"
+    )
     args = parser.parse_args(argv)
 
     from quickdraw.monitoring.schema import validate_current  # local: keeps import light
@@ -202,6 +231,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(contract, indent=2) + "\n")
     args.out_html.write_text(html)
+    if args.history:
+        existing = json.loads(args.history.read_text()) if args.history.exists() else []
+        args.history.write_text(json.dumps(append_history(contract, existing), indent=2) + "\n")
     drift = contract["dataset_drift"].get("drift_detected")
     print(
         f"drift report: {contract['window']['n_current']} current vs "
