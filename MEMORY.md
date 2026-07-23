@@ -70,6 +70,21 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop, later²)** — **Phase 4 task 2 (drift MODULE) built** (branch
+  `phase4-drift-report`, PR pending). `quickdraw.monitoring.drift` + `.schema`: prediction-log
+  NDJSON → dataframe (`records_to_frame`, pure) → Pandera-validated current window
+  (`validate_current`; loud on empty/bad data) → **Evidently 0.7.21** drift vs the reference →
+  **`drift.json`** data contract (per-column `{method, score, threshold, drifted}` + self-computed
+  ref-vs-current histograms/class-shares) + Evidently HTML (functional artifact). Reads **local
+  NDJSON** so the module never touches S3 and is fully testable — the workflow (next PR) will
+  `aws s3 sync` the `predictions/dt=…` logs to a dir. New `monitoring` dep group (`evidently`,
+  in default-groups). **Real gotcha fixed** (see LEARNING): Evidently auto-switches method by
+  sample size — 15k reference → *distance* metrics (Wasserstein/JS, drifted when score **>**
+  threshold), not p-values — so I pinned `wasserstein`/`jensenshannon` @ 0.1 to fix an inverted
+  drift verdict. Verified end-to-end vs the real 15k reference + synthetic low-confidence live
+  logs: confidence mean 0.907→0.482 correctly flagged drifted. 136 tests (6 new), ruff clean.
+  **Split:** this is the module; **task 2's workflow (`drift-report.yml`) + evidence-hub + trend
+  are the NEXT PR** (need S3/OIDC, untestable locally).
 - **2026-07-23 (personal laptop, later)** — **Grafana/Prometheus data contract** (branch
   `phase4-metrics-contract`, PR pending) — Monish's ask: make all public-facing artifacts
   (Prometheus, Grafana, Evidently) customizable in looks so he styles them in the portfolio

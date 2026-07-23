@@ -4,6 +4,28 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-23 — Evidently drift: the method silently flips direction on you (and p-values lie at scale)
+
+- Evidently's `DataDriftPreset` **auto-selects the drift method by sample size**: small samples
+  get statistical tests (K-S / chi-square, value = **p-value**, drifted when value **<** 0.05);
+  large ones (our reference is 15k rows) get **distance** metrics (Wasserstein / Jensen-Shannon,
+  value = a **distance**, drifted when value **>** threshold). Same field name, opposite
+  direction. My first cut hard-coded `drifted = value < threshold`, so on the real 15k-vs-300
+  comparison it reported `confidence` as *not* drifted even though its mean had fallen 0.907 →
+  0.482 — a backwards drift report, worse than none. The tell: Evidently's own
+  `DriftedColumnsCount` said 2 columns drifted while my per-column booleans said the other 2.
+- Two lessons. (1) **Don't recompute a library's verdict from its raw score unless you know the
+  method** — either read the library's own drifted flag, or *pin* the method so the direction is
+  fixed. I pinned `num_method="wasserstein"`, `cat_method="jensenshannon"`, threshold 0.1, so
+  every column uses a distance and `drifted = score > threshold` is uniformly correct. (2)
+  **Distances beat p-values for drift at these sizes anyway**: with 15k reference rows, K-S
+  p-values are hypersensitive — any trivial difference gives p≈0, so *everything* "drifts". A
+  distance measures *magnitude* independent of n, which is what you actually want to threshold on.
+- Verified end-to-end: synthetic low-confidence "live" logs vs the real reference → confidence
+  Wasserstein 2.34 (drifted), margin 1.91 (drifted), predicted_label JS 0.06 (not drifted) —
+  matching Evidently's count of 2. The `drift.json` contract carries `{method, score, threshold,
+  drifted}` per column so it's self-describing, plus self-computed histograms for the site.
+
 ## 2026-07-22 — Wiring the monitoring stack: two silent gotchas (scrape selection + a library registry bug)
 
 - **kube-prometheus-stack ignores "foreign" ServiceMonitors by default.** The Prometheus

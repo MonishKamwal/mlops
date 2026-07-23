@@ -45,6 +45,12 @@ evidence = [
     "markdown>=3.7",
     "plotly>=5.24",
 ]
+# Drift monitoring (Phase 4) — only the drift-report job + local runs need Evidently, and
+# the serving image never imports quickdraw.monitoring.drift, so it stays out of
+# [project.dependencies]. In default-groups so ci.yml's pytest can import the module.
+monitoring = [
+    "evidently>=0.7.21",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -57,7 +63,7 @@ packages = ["src/quickdraw"]
 # pinned to PyTorch's CPU wheel index — the default Linux wheel drags in ~2.5 GB of
 # CUDA libraries that a laptop/CI/Lambda project never uses.
 [tool.uv]
-default-groups = ["dev", "train", "evidence"]
+default-groups = ["dev", "train", "evidence", "monitoring"]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
