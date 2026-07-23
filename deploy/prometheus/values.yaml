@@ -1,0 +1,63 @@
+# kube-prometheus-stack values for the ephemeral EKS demo (PLAN.md Phase 3, task 5).
+#
+# Tuned for a short-lived load-test audience on 3x t4g.small (2 GB each), NOT production:
+# Alertmanager off, 2h in-memory retention, modest requests. The whole stack lives and dies
+# with the cluster, so there is no persistent volume (an EBS PVC would add teardown surface
+# and cost for data nobody reads after the run).
+
+alertmanager:
+  enabled: false # no paging in a 30-minute demo; drops a pod + its memory
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 100Mi
+
+prometheus:
+  prometheusSpec:
+    # Scrape ServiceMonitors/PodMonitors regardless of their `release` label. Our API's
+    # ServiceMonitor (from the quickdraw-api chart) does NOT carry this stack's release
+    # label, and by default the operator only selects monitors that do — so without these
+    # the /metrics endpoint would be silently ignored.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    retention: 2h
+    scrapeInterval: 15s
+    # No storageSpec -> emptyDir TSDB. Fine for a sub-hour run; nothing to clean up.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        memory: 900Mi
+
+grafana:
+  # Ephemeral cluster with no public exposure (ClusterIP + port-forward only); this password
+  # is just what the workflow's PNG-render step authenticates with. Not a secret.
+  adminPassword: prom-operator
+  # The stack's bundled Kubernetes/Node dashboards ARE the "cluster" view (CPU/mem per
+  # node/pod), provisioned as code by the chart — so we only hand-author the API dashboard.
+  defaultDashboardsEnabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL # import our quickdraw-api dashboard ConfigMap from any namespace
+      label: grafana_dashboard
+  # Server-side PNG rendering so the workflow can capture dashboards under k6 load. Kept
+  # small; the capture step is best-effort, so if the renderer is ever starved the run
+  # still goes green with the rest of the evidence.
+  imageRenderer:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 384Mi

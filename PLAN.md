@@ -377,6 +377,21 @@ and destroyed automatically, at ~$0 idle cost.
    audience: capture dashboard PNGs via Grafana's render endpoint during and after the load
    window → evidence hub.
 
+   > **Amended 2026-07-22 (as built):** the **API** dashboard is hand-authored as code
+   > (`deploy/grafana/dashboards/quickdraw-api.json`, imported via a labeled ConfigMap the
+   > Grafana sidecar picks up); the **cluster** dashboard rides the stack's *bundled*
+   > Kubernetes/Node dashboards (`defaultDashboardsEnabled` — also code, and better than a
+   > hand-written one). Stack values (`deploy/prometheus/values.yaml`) are trimmed for the
+   > small nodes: Alertmanager off, 2h in-memory retention (no PVC), and
+   > `serviceMonitorSelectorNilUsesHelmValues: false` so Prometheus scrapes our chart's
+   > ServiceMonitor (which lacks the stack's release label). Node group bumped **2 → 3
+   > `t4g.small`** to fit the stack alongside the API. The API panels are RPS, latency
+   > percentiles, error rate, and **requests-by-status** — the planned *in-flight* panel was
+   > dropped: the instrumentator's inprogress gauge ignores its custom-registry arg and
+   > collides on the global registry (LEARNING 2026-07-22), and adding it would have coupled
+   > this task to a serving-image rebuild. PNG capture + Prometheus-targets are **best-effort**
+   > so a renderer hiccup on the 2 GB nodes never reds the run.
+
 **Tools introduced:** Terraform AWS modules, EKS, Helm, k6, Prometheus + Grafana
 (kube-prometheus-stack).
 

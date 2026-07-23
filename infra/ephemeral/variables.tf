@@ -29,19 +29,19 @@ variable "node_instance_types" {
 }
 
 variable "node_desired_size" {
-  description = "Desired node count. Two is enough to demo scheduling across nodes."
+  description = "Desired node count. Three t4g.small (2 GB each) so the API pods AND the kube-prometheus-stack (Prometheus/Grafana/exporters, task 5) both fit — two nodes (4 GB) was too tight once monitoring was added."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "node_min_size" {
   description = "Minimum node count."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "node_max_size" {
   description = "Maximum node count — a little headroom for the k6 load window."
   type        = number
-  default     = 3
+  default     = 4
 }
