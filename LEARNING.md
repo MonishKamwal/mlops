@@ -4,6 +4,29 @@ Learning journal, newest first. Each entry: what happened, what was learned, why
 matters. This feeds the portfolio's Journey/devlog section (PLAN.md Phase 4). Claude:
 add an entry whenever a task teaches a concept that wasn't obvious going in.
 
+## 2026-07-23 — `dvc pull <path>` can't fetch a CI-regenerated artifact (lockfile md5 vs content)
+
+- The drift report did `dvc pull reports/monitoring/reference.csv` and failed —
+  `Missing cache files: md5 691fceed…, Checkout failed`. First guess: the DVC remote was empty
+  (no workflow ran `dvc push`). Added `dvc push` to train-deploy, re-ran, **still failed with the
+  same md5**. The deeper truth: `dvc pull <path>` resolves the object hash from the **committed
+  `dvc.lock`**, but that hash was computed by whatever last *committed* the lockfile (the laptop).
+  CI's `dvc repro` retrains and regenerates `reference.csv` with **different content** (CI training
+  ≠ laptop training — cross-machine seed noise; the log showed mean confidence 0.9057 vs the
+  laptop's 0.9070), so `dvc push` uploaded a *different* md5. The committed lockfile still pointed
+  at the laptop's `691fceed…`, which nobody ever pushed → permanent miss. **CI never commits its
+  regenerated lockfile back, so the committed hash can never match what CI pushes.**
+- Fix: stop fetching the reference by lockfile hash. train-deploy `aws s3 cp`s
+  `reference.csv` to a **stable key** (`s3://…/monitoring/reference.csv`) — same "publish the
+  artifact to a fixed location" pattern the project already uses for `drift.json`/evidence — and
+  the drift report `aws s3 cp`s it back. It ties the reference to the just-trained model and
+  sidesteps content-hashing entirely. (`dvc push` stays for its real job: caching derived outs so
+  a fresh clone / later run can `dvc pull` for *reproducibility*, where the committed lockfile and
+  the puller agree.) Lesson: DVC's content-addressed `pull <path>` only works when the puller's
+  committed `dvc.lock` matches what was pushed — which is *not* true for CI-regenerated,
+  non-deterministic artifacts. For "hand the latest CI artifact to another job," publish to a
+  fixed path, don't `dvc pull` by hash.
+
 ## 2026-07-23 — Evidently drift: the method silently flips direction on you (and p-values lie at scale)
 
 - Evidently's `DataDriftPreset` **auto-selects the drift method by sample size**: small samples

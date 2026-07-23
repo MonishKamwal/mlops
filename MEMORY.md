@@ -70,8 +70,20 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
-- **2026-07-23 (personal laptop, later⁴)** — **Fix: train-deploy never `dvc push`ed → empty
-  remote.** The first Drift report run (29976492401) **failed** at `dvc pull
+- **2026-07-23 (personal laptop, later⁵)** — **Real drift fix: publish reference to a stable S3
+  path (the `dvc push` fix wasn't enough).** After PR #34 (`dvc push`) merged + a Train & Deploy
+  run (30044415424, `dvc push` → "4 files pushed"), the Drift report **still failed** with the same
+  md5 691fceed. Root cause (LEARNING): `dvc pull <path>` fetches by the **committed dvc.lock** md5,
+  but CI's `dvc repro` regenerates `reference.csv` with *different* content (CI training ≠ laptop —
+  the run logged mean confidence 0.9057 vs laptop 0.9070) and pushes a *different* md5; committed
+  dvc.lock still points at the laptop's 691fceed, never uploaded → permanent miss. Fix (branch
+  `phase4-publish-reference`, PR pending): train-deploy `aws s3 cp`s `reference.csv` to a **stable
+  key** `s3://<data-bucket>/monitoring/reference.csv` (same publish pattern as drift.json); the
+  drift report `aws s3 cp`s it back instead of `dvc pull`. `dvc push` stays (caches derived outs for
+  repro). YAML clean. **To unblock: re-dispatch Train & Deploy after merge** (runs the new publish
+  step), THEN re-dispatch Drift report.
+- **2026-07-23 (personal laptop, later⁴)** — **Fix attempt 1 (insufficient): train-deploy never
+  `dvc push`ed → empty remote.** The first Drift report run (29976492401) **failed** at `dvc pull
   reports/monitoring/reference.csv` ("Missing cache files … Checkout failed"). Root cause: NO
   workflow ran `dvc push` — train-deploy only did `dvc pull` (best-effort) + `dvc repro` — so the
   S3 DVC remote (`s3://mlops-quickdraw-data-ab1b/dvc`) was never populated with derived outs. Fix
@@ -658,11 +670,13 @@ scheduled cron runs" remains, automatic). Phase 4: task 1 (drift reference) merg
 (drift report) — module merged (#32), **workflow + hub PR pending** (branch `phase4-drift-workflow`).
 Next:
 
-1. **Unblock the drift report** (`phase4-dvc-push`, PR pending): the first Drift report run
-   FAILED because the DVC remote was empty (no workflow ran `dvc push`). Fix adds `dvc push` to
-   train-deploy after `dvc repro`. **After merge: dispatch `Train & Deploy`** (repro + push
-   populates the remote with `reference.csv` + model outs), THEN **re-dispatch `Drift report`** →
-   first real drift over visitor logs (expect confidence/margin drifted, real doodles are OOD).
+1. **Unblock the drift report** (`phase4-publish-reference`, PR pending — supersedes the #34
+   `dvc push` fix, which was necessary but not sufficient; see progress log). Fix: train-deploy
+   publishes `reference.csv` to a stable S3 key `monitoring/reference.csv`; drift report `aws s3
+   cp`s it (not `dvc pull`, whose committed md5 never matches CI-regenerated content). **After
+   merge: re-dispatch `Train & Deploy`** (runs the new publish step), THEN **re-dispatch `Drift
+   report`** → first real drift over visitor logs (expect confidence/margin drifted — real doodles
+   are OOD, lower confidence).
 2. **Tasks 3–7** (PLAN §5 Phase 4): feedback 👍/👎 signal (portfolio canvas → S3 → proxy-accuracy;
    needs a portfolio-repo change + serving/log tweak), drift-threshold GitHub issue
    (alerting-lite), documented retrain path, portfolio polish, final cost review.

@@ -90,12 +90,19 @@ jobs:
       - name: Reproduce the pipeline (download → … → train → evaluate → export)
         run: uv run dvc repro
 
-      # Upload the regenerated DVC outs (processed npz, model, drift reference, …) to the S3
-      # remote so downstream jobs can `dvc pull` them — nothing else pushes, so without this
-      # the remote is empty and e.g. drift-report.yml's pull of reports/monitoring/reference.csv
-      # fails. `raw` is push:false (Google GCS is canonical), so only derived artifacts upload.
+      # Populate the DVC remote with the regenerated derived outs (processed npz, model, …) so a
+      # fresh clone / a later run can `dvc pull` them instead of rebuilding. `raw` is push:false
+      # (Google GCS is canonical), so only derived artifacts upload.
       - name: Push DVC artifacts to S3
         run: uv run dvc push
+
+      # Publish the drift reference to a STABLE S3 path for the drift report to read. It can't
+      # `dvc pull` this by lockfile md5: CI training isn't byte-identical to whatever produced the
+      # committed dvc.lock, so the lockfile hash never matches what CI pushes. Copying the file to
+      # a fixed key (like drift.json/evidence do) ties the reference to the just-trained model and
+      # sidesteps hash matching entirely.
+      - name: Publish the drift reference for monitoring
+        run: aws s3 cp reports/monitoring/reference.csv "s3://$MLFLOW_STATE_BUCKET/monitoring/reference.csv" --no-progress
 
       # Exits non-zero on a regression, which fails the job here and skips every
       # deploy step below. The metric-diff summary lands in the job summary.
