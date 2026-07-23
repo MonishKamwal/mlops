@@ -418,13 +418,25 @@ the failsafe design (see §6).
 **Goals:** Close the loop: live traffic → drift reports → (manual) retrain decision. Portfolio
 becomes a complete, navigable story.
 
+> **Amended 2026-07-23 (drift is on *outputs*, not inputs; public output is a data contract):**
+> the Phase 1 prediction log is privacy-first — it stores `input_sha256`, never pixels or
+> strokes — so "pixel-intensity stats / stroke counts" (task 2 below) aren't recoverable, and
+> drift is measured on the model's **output distribution**: predicted-class mix + top-1
+> confidence + top1-top2 margin. This is the *stronger* story anyway (real doodles are OOD →
+> lower confidence = a visible train/serve gap) and it uses the months of logs we already have.
+> True input drift would need a log-schema extension (touches serving, starts data from zero) —
+> deferred, not core. Also: every public-facing Phase 4 output ships as a **JSON data contract**
+> (`drift.json`) the portfolio site styles itself; Evidently's HTML stays a functional artifact.
+
 **Tasks:**
-1. **Reference dataset:** freeze a training-distribution sample (features + predicted-class
-   distribution from a held-out set) as the Evidently reference, versioned with DVC.
+1. **Reference dataset — built 2026-07-23** (`quickdraw.monitoring.reference`, DVC stage
+   `reference` → `reports/monitoring/reference.csv`): the deployed model's output distribution
+   over the held-out test split (predicted class, confidence, margin) — 15k rows, median
+   confidence ~0.997. Regenerated whenever the model changes, so it always matches what's live.
 2. **`drift-report.yml` (weekly):** pull prediction logs from S3 → build current-window
-   dataframe (pixel-intensity stats, stroke counts, confidence distribution, predicted-class
-   mix) → Pandera-validate → Evidently data-drift + prediction-drift report → static HTML →
-   evidence hub, with a small trend index page (drift score over weeks).
+   dataframe (confidence + margin distribution, predicted-class mix, source, latency) →
+   Pandera-validate → Evidently prediction-drift report vs the reference → **`drift.json` data
+   contract** + functional HTML → evidence hub, with a small trend series (drift score over weeks).
 3. **Feedback signal:** portfolio canvas gets "did I guess right? 👍/👎" → logged to S3 →
    weekly proxy-accuracy chart joins the drift report (real ground-truth-ish labels from real
    users — strong talking point).

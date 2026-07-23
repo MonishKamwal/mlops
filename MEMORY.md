@@ -70,6 +70,22 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop)** — **Phase 4 STARTED — task 1 (drift reference) built**
+  (branch `phase4-drift-reference`, PR pending). Design call that shapes the phase: the
+  prediction logs are privacy-first (store `input_sha256`, not pixels/strokes), so drift is on
+  the model's **output** distribution — predicted-class mix + top-1 confidence + top1-top2
+  margin — not pixel/stroke *input* drift (the plan's original task-2 wish; deferred, needs a
+  serving-side log-schema extension that starts data from zero). This is the stronger story:
+  real doodles are OOD → lower confidence = a visible train/serve gap, and it uses months of
+  existing logs. Built `quickdraw.monitoring.reference` (pure `summarize_predictions` +
+  `build_reference`) → DVC stage `reference` → `reports/monitoring/reference.csv`: the deployed
+  model's output distribution over the test split. Generated locally: **15,000 rows, median
+  confidence 0.997** (the high baseline live logs get compared against). CSV (not parquet) so
+  the DVC out is deterministic. No new deps (torch/pandas already present; Evidently arrives in
+  task 2). 129 tests (2 new + updated the pipeline-order test). New memory: all public-facing
+  Phase 4 output = JSON data contract, Monish styles it in the portfolio repo (see
+  [[public-facing-data-contract]]). **Not pushed to the DVC remote from the laptop** (no creds);
+  the next train-deploy `dvc repro` regenerates + `dvc push`es it (dvc.yaml is in its path filter).
 - **2026-07-23 (personal laptop)** — **Task 5 proven on a cluster → Phase 3 build tasks (1–5)
   all done.** PR #28 merged; `eks-demo` run 29970873573 green (29m5s): apply brought up **3
   nodes**, kube-prometheus-stack installed, the API's ServiceMonitor was scraped (**2 targets,
@@ -585,6 +601,23 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
+**Phases 1–3 COMPLETE and proven on real clusters; Phase 4 (drift + polish) underway.** Phase 3's
+full ephemeral-EKS lifecycle runs green (apply → 3× `t4g.small` Graviton → CNI-before-compute →
+API + kube-prometheus-stack → k6 → Grafana dashboard captured under load → `if:always()` destroy;
+only the DoD "two consecutive *scheduled* cron runs" remains, automatic). **Phase 4 task 1 (drift
+reference) built** (branch `phase4-drift-reference`, PR pending) — see progress log. Next:
+
+1. **Merge task 1**, then **task 2 — `drift-report.yml`** (weekly + dispatch): pull prediction
+   logs from S3 (`predictions/dt=…`) → build a current-window dataframe with the SAME columns as
+   the reference (predicted_label, confidence, margin) → Pandera-validate → **Evidently**
+   prediction-drift vs `reports/monitoring/reference.csv` → emit **`drift.json`** (data contract,
+   [[public-facing-data-contract]]) + functional HTML → evidence hub, plus a drift-over-weeks
+   trend. Evidently dep gets added here (monitoring group). Note the model-segmentation nuance:
+   logs carry `model_sha256`; compare like-model logs vs the reference (champion rarely moves).
+2. **Then tasks 3–7** (PLAN §5 Phase 4): feedback 👍/👎 signal, drift-threshold GitHub issue,
+   documented retrain path, portfolio polish, final cost review.
+3. **Housekeeping (anytime):** link the eks-demo run page + Grafana PNG from the hub; the 5xx
+   dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); Node-20 workflow actions.
 **Phase 2 complete; Phase 3 (ephemeral EKS) — all build tasks (1–5) DONE and proven on a real
 cluster.** The full lifecycle runs green: apply → 3× `t4g.small` Ready → kube-prometheus-stack →
 API (arm64 pod per node) → smoke → k6 → Grafana dashboard captured under load → `if: always()`

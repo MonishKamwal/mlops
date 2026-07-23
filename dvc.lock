@@ -219,3 +219,31 @@ stages:
       hash: md5
       md5: 5b56cf495d56a05c63f04b0b2fada282
       size: 302
+  reference:
+    cmd: python -m quickdraw.monitoring.reference
+    deps:
+    - path: data/processed/quickdraw.npz
+      hash: md5
+      md5: ab3b27daa743297978cd3bc40d193198
+      size: 41088939
+    - path: models/model.pt
+      hash: md5
+      md5: 42da9cd1468303ffbdefaf7c81825ddd
+      size: 1692401
+    - path: src/quickdraw/data/preprocess.py
+      hash: md5
+      md5: 3103b612192a22cfaaa23611d3942570
+      size: 11660
+    - path: src/quickdraw/monitoring/reference.py
+      hash: md5
+      md5: a69e269dc7df38fc39bcfa463f927846
+      size: 3777
+    - path: src/quickdraw/training/model.py
+      hash: md5
+      md5: 7d1ba7ebcc1b3355dc89b079b28f403c
+      size: 2964
+    outs:
+    - path: reports/monitoring/reference.csv
+      hash: md5
+      md5: 691fceedf9f98b463c0bc97674b43140
+      size: 353921
