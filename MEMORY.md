@@ -86,8 +86,19 @@ is the long-term what-and-why; this file is the current state and the exact next
   Phase 4 output = JSON data contract, Monish styles it in the portfolio repo (see
   [[public-facing-data-contract]]). **Not pushed to the DVC remote from the laptop** (no creds);
   the next train-deploy `dvc repro` regenerates + `dvc push`es it (dvc.yaml is in its path filter).
+- **2026-07-23 (personal laptop)** — **Task 5 proven on a cluster → Phase 3 build tasks (1–5)
+  all done.** PR #28 merged; `eks-demo` run 29970873573 green (29m5s): apply brought up **3
+  nodes**, kube-prometheus-stack installed, the API's ServiceMonitor was scraped (**2 targets,
+  both `health=up`**), and the Grafana dashboard **rendered under k6 load** (valid 1600×900 PNG
+  in the evidence: request-rate ~200 rps on `/predict`, server-side latency p50 30 ms / p90 47
+  / p95 50, requests-by-status 2xx ramp, 5xx "No data" = zero errors). All monitoring pods
+  Running (stack fit on 3× `t4g.small`, no OOM). Every task-5 judgment call held
+  (`serviceMonitorSelectorNilUsesHelmValues:false` made the scrape land; sidecar imported the
+  dashboard). **Only Phase 3 tail left: the DoD "two consecutive *scheduled* runs" (monthly
+  cron).** Minor polish noted: the 5xx panel shows "No data" at zero errors — `or vector(0)`
+  would show 0 instead.
 - **2026-07-22 (personal laptop, later³)** — **Phase 3 task 5 (observability) built**
-  (branch `phase3-observability`, PR pending). kube-prometheus-stack installed per run before
+  (branch `phase3-observability`, merged PR #28). kube-prometheus-stack installed per run before
   the API (so the ServiceMonitor CRD exists), trimmed for the small nodes
   (`deploy/prometheus/values.yaml`: Alertmanager off, 2h in-memory retention,
   `serviceMonitorSelectorNilUsesHelmValues: false` so our chart's ServiceMonitor — which lacks
@@ -607,9 +618,24 @@ reference) built** (branch `phase4-drift-reference`, PR pending) — see progres
    documented retrain path, portfolio polish, final cost review.
 3. **Housekeeping (anytime):** link the eks-demo run page + Grafana PNG from the hub; the 5xx
    dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); Node-20 workflow actions.
+**Phase 2 complete; Phase 3 (ephemeral EKS) — all build tasks (1–5) DONE and proven on a real
+cluster.** The full lifecycle runs green: apply → 3× `t4g.small` Ready → kube-prometheus-stack →
+API (arm64 pod per node) → smoke → k6 → Grafana dashboard captured under load → `if: always()`
+destroy, clean. Proven across runs 29936256948 (tasks 1–4) and 29970873573 (task 5). The
+wall-by-wall path: IAM (PR #24/#25) → `t3.medium` ineligible → `t4g.small` Graviton (PR #25) →
+CNI NotReady → `addons` before_compute (PR #26) → observability (PR #28). Next:
+
+1. **Phase 3 DoD tail (the only thing left in Phase 3):** two consecutive *scheduled* (cron)
+   runs green — so far all runs have been manual dispatches. The monthly cron (1st, 06:00 UTC)
+   supplies these; nothing to build, just let it run (or dispatch again to keep confidence).
+2. **Phase 4 (monitoring/drift + portfolio polish)** is the next build phase — see PLAN.md §5.
+   Real visitor prediction logs have been accruing since Phase 1, so the drift story has data.
+3. **Housekeeping (anytime):** link the eks-demo run page + Grafana PNG from the evidence hub;
+   the 5xx dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); several workflow
+   actions still target Node 20 (forced to 24); style the portfolio evidence section off
+   `evidence.json`.
 
 Watch items: the evidence hub's confusion-matrix PNG is a laptop-era artifact (v1 @
 0.9157) while headline metrics come from the registry (now ~v6, champion still v2 @
-0.9170) — a later refinement could regenerate it from the champion; several actions in
-the workflows still target Node 20 (GitHub forces Node 24 — bump majors when convenient);
-markdownlint nits in PLAN.md are known and not CI-checked.
+0.9170) — a later refinement could regenerate it from the champion; markdownlint nits in
+PLAN.md/MEMORY.md are known and not CI-checked.
