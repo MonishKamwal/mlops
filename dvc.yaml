@@ -84,3 +84,17 @@ stages:
       - src/quickdraw/training/model.py
     outs:
       - models/model.onnx
+
+  # The drift reference (PLAN.md Phase 4, task 1): the deployed model's output distribution
+  # over the test split (predicted class, confidence, margin). A stage so it's regenerated
+  # whenever the model changes — the reference always matches the currently-deployed model.
+  reference:
+    cmd: python -m quickdraw.monitoring.reference
+    deps:
+      - data/processed/quickdraw.npz
+      - models/model.pt
+      - src/quickdraw/monitoring/reference.py
+      - src/quickdraw/training/model.py
+      - src/quickdraw/data/preprocess.py
+    outs:
+      - reports/monitoring/reference.csv

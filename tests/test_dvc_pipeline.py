@@ -37,6 +37,7 @@ def test_stages_present_in_pipeline_order():
         "train",
         "evaluate",
         "export",
+        "reference",
     ]
 
 
