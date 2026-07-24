@@ -10,10 +10,15 @@ on:
   schedule:
     - cron: "0 7 * * 1" # 07:00 UTC every Monday
   workflow_dispatch:
+    inputs:
+      min_confidence:
+        description: "Alert if mean live confidence is below this. Default 0.55; set 1.0 to test-fire the alert path."
+        default: "0.55"
 
 permissions:
   id-token: write # OIDC assume-role (read logs + reference, write the evidence bucket)
   contents: read
+  issues: write # alerting-lite: open/comment a `drift-alert` issue when the model degrades
 
 # One drift run at a time — the trend history is read-modify-write on a single S3 object.
 concurrency:
@@ -111,6 +116,31 @@ jobs:
             aws s3 cp "$f" "s3://$DATA_BUCKET/monitoring/$f" --no-progress
           done
 
+      # Alerting-lite (task 4): page a human only when the model is doing badly on real
+      # drawings (confidence collapse / low proxy accuracy) — NOT on the ever-present OOD
+      # drift. Idempotent: comment on the open drift-alert issue if one exists, else open one.
+      - name: Open a drift alert if warranted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          uv run python -m quickdraw.monitoring.alert \
+            --drift drift.json --feedback feedback.json --out alert.json \
+            --min-confidence "${{ inputs.min_confidence || '0.55' }}"
+          [ "$(jq -r .alert alert.json)" = "true" ] || { echo "no alert"; exit 0; }
+          gh label create drift-alert --color B60205 \
+            --description "Automated drift/accuracy alert" 2>/dev/null || true
+          title=$(jq -r .title alert.json)
+          jq -r .body alert.json > body.md
+          existing=$(gh issue list --label drift-alert --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+            echo "commented on #$existing"
+          else
+            gh issue create --label drift-alert --title "$title" --body-file body.md
+          fi
+
       - name: Upload artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,4 +152,5 @@ jobs:
             drift_history.json
             feedback.json
             feedback_history.json
+            alert.json
           if-no-files-found: warn

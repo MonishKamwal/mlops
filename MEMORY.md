@@ -70,6 +70,17 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop, later⁹)** — **Phase 4 task 4 (alerting-lite) built** (branch
+  `phase4-drift-alert`, PR pending). `quickdraw.monitoring.alert` (pure `evaluate`) decides from
+  drift.json + feedback.json; drift-report opens/updates a **`drift-alert`** GitHub issue
+  (idempotent — comments on the open one, else creates; auto-creates the label). **Key design:
+  does NOT alert on the ever-present OOD drift** (would fire weekly, meaningless) — only when the
+  model does *badly* on real drawings: mean confidence < floor (default 0.55) or proxy accuracy <
+  floor (0.5, gated on ≥10 verdicts). Thresholds tunable; `workflow_dispatch` input
+  `min_confidence` (set 1.0) test-fires the path (DoD). Added `issues: write` perm. 7 new tests
+  (160 total), ruff + check-yaml clean, CLI smoke-tested. **NEXT: tasks 5–7** (retrain path,
+  portfolio polish, cost review). Also can test-fire the alert once (dispatch Drift report with
+  min_confidence=1.0) to satisfy the DoD.
 - **2026-07-23 (personal laptop, later⁸)** — **Phase 4 task 3 COMPLETE — proxy-accuracy (last
   piece).** `quickdraw.monitoring.feedback`: feedback-log NDJSON → **proxy accuracy** (overall +
   per-class + by-source) → **`feedback.json`** data contract + `feedback_history.json` trend
@@ -699,17 +710,17 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phases 1–3 COMPLETE; Phase 4 tasks 1–3 DONE.** Drift report live (real `drift.json`, live
-confidence 0.832 < reference 0.909). Task 3 (feedback signal) built across both repos: `/feedback`
-live + verified (mlops #37); 👍/👎 UI verified (portfolio #5); proxy-accuracy → `feedback.json`
-(branch `phase4-proxy-accuracy`, PR pending). Next:
+**Phases 1–3 COMPLETE; Phase 4 tasks 1–4 DONE.** Drift report live; feedback signal (task 3)
+built across both repos (`/feedback` live, 👍/👎 UI, proxy-accuracy → `feedback.json`); alerting-lite
+(task 4) built (branch `phase4-drift-alert`, PR pending). Next:
 
-1. **Merge the open PRs** (mlops `phase4-proxy-accuracy`; portfolio #5 if not yet). Then real
-   👍/👎 flow to `feedback/dt=…/`, and the weekly Drift report (or a dispatch) produces
-   `feedback.json`. No admin steps (IAM already applied for `feedback/*`).
-2. **Task 4 — alerting-lite** (PLAN §5): if the drift score crosses a threshold, the drift-report
-   workflow opens a GitHub issue (`drift-alert` label). Then tasks 5–7: documented retrain path,
-   portfolio polish, final cost review.
+1. **Merge `phase4-drift-alert`.** Optional: **test-fire the alert** once for the DoD — dispatch
+   Drift report with input `min_confidence=1.0` → forces a `drift-alert` GitHub issue.
+2. **Task 5 — retrain path** (PLAN §5): documented `workflow_dispatch` on train-deploy optionally
+   mixing high-confidence/👍 real drawings into training — completes the data flywheel narrative
+   (demonstrate once). Then **task 6** (portfolio polish — largely Monish's visual domain: arch
+   diagram, journey/devlog, evidence integration) and **task 7** (final cost review → Cost
+   Explorer screenshot as evidence).
 3. **Phase 3 DoD tail (automatic):** two consecutive *scheduled* cron runs green — the monthly
    cron (1st, 06:00 UTC) supplies these; nothing to build.
 
