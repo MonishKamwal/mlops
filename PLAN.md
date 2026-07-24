@@ -454,8 +454,13 @@ becomes a complete, navigable story.
    → **`feedback.json`** data contract + `feedback_history.json` trend → hub. Frontend: `sendFeedback`
    in `lib/predict.ts` + 👍/👎 in `SketchDemo.tsx` (portfolio repo). An empty window is normal
    (feedback is sparse) → `n=0`/`accuracy=null`, never an error.
-4. **Alerting-lite:** if drift score crosses threshold, the workflow opens a GitHub issue
-   (`drift-alert` label) — the "page a human" step, right-sized.
+4. **Alerting-lite — built 2026-07-23.** `quickdraw.monitoring.alert` decides from
+   drift.json + feedback.json; the drift-report workflow opens/updates a **`drift-alert`**
+   GitHub issue when warranted (idempotent: comments on the open one, else creates). Crucially
+   it does **not** alert on the ever-present OOD drift (that would fire every week and mean
+   nothing) — only on the model doing *badly* on real drawings: **mean confidence below a floor**
+   (default 0.55) or **proxy accuracy below a floor** (default 0.5, gated on ≥10 verdicts).
+   Thresholds are tunable; a `workflow_dispatch` `min_confidence` input (set 1.0) test-fires it.
 5. **Retrain path:** documented `workflow_dispatch` on `train-deploy.yml` optionally mixing
    logged real drawings (above a confidence/feedback bar) into training data — even if only
    demonstrated once, it completes the data flywheel narrative.
