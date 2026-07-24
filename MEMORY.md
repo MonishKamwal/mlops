@@ -70,6 +70,22 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-24 (personal laptop, later⁴)** — **Phase 4 task 6 — the mlops-repo half: `ARCHITECTURE.md`
+  + README overhaul** (branch `phase4-architecture-docs`, PR pending). `ARCHITECTURE.md` is the deep
+  reference — 11 sections, 9 mermaid diagrams: the four planes (§1), train-deploy incl. both the
+  normal and `include_captures` paths (§2) with the DVC DAG and gate semantics as insets, the request
+  path (§3), the drift/feedback/alert pipeline (§4), the retrain flywheel (§5), the ephemeral cluster
+  + three teardown layers (§6), the evidence plane (§7), storage/trigger/IAM tables (§8–10), and a
+  **portfolio cut** (§11) naming what survives the trim for the site. It documents *what happens*;
+  `PLAN.md` §2 keeps *why that tool*. README rewritten: its Status still said "Phase 0 — foundations"
+  (four phases stale), the DVC stage order was wrong (`download → validate → preprocess`), and there
+  was no diagram. Now: 4 workflow badges, a nav line (demo · hub · architecture · model card · plan),
+  the one-sentence flywheel framing, a **collapsed four-plane mermaid** (the portfolio cut of §1),
+  accurate capability bullets, honest status, and DVC/docker dev commands. **All 10 mermaid blocks
+  parse-checked** by rendering them through mermaid itself (headless Chrome + the bundle inlined in
+  the earlier design preview) — worth repeating before any doc PR, since GitHub silently shows a
+  broken-diagram box. Docs only: no code, no workflow, no infra touched. Remaining in task 6 is the
+  portfolio repo (site copy, journey/devlog from LEARNING.md, wiring the JSON contracts).
 - **2026-07-24 (personal laptop, later³)** — **Phase 4 task 5 COMPLETE — retrain flywheel
   demonstrated end-to-end.** PRs #6 (frontend) + #42 (pipeline) merged; dispatched Train & Deploy
   with `include_captures=true` (run 30061303377, success). Log: **synced 4 capture objects →
@@ -748,9 +764,12 @@ added.
 **Phases 1–3 COMPLETE; Phase 4 tasks 1–5 DONE** (retrain flywheel demonstrated end-to-end, run
 30061303377 — captures folded → v14 → gate PASS → deployed). **Only tasks 6 & 7 remain.** Next:
 
-1. **Task 6 — portfolio polish** (largely Monish's visual domain, in the portfolio repo): arch
-   diagram, journey/devlog (LEARNING.md is the raw material), per-component write-ups, and wiring
-   the hub's data contracts into the site (`drift.json`, `feedback.json`, `api-metrics.json`,
+1. **Task 6 — portfolio polish.** The **mlops-repo half is built** (branch
+   `phase4-architecture-docs`, PR pending): `ARCHITECTURE.md` (the deep reference, 9 diagrams) +
+   a README overhaul (badges, hero diagram, accurate status). **Merge that**, then the portfolio
+   repo remains — largely Monish's visual domain: site copy off ARCHITECTURE.md §1/§5/§11,
+   journey/devlog (LEARNING.md is the raw material), per-component write-ups, and wiring the hub's
+   data contracts into the site (`drift.json`, `feedback.json`, `api-metrics.json`,
    `evidence.json`, `drift_history.json`, `feedback_history.json`). Claude can help with
    structure/content + contract wiring; design is Monish's.
 2. **Task 7 — final cost review**: Cost Explorer screenshot for the project month → publish as
