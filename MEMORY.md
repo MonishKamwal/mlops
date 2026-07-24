@@ -70,6 +70,18 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-23 (personal laptop, later⁸)** — **Phase 4 task 3 COMPLETE — proxy-accuracy (last
+  piece).** `quickdraw.monitoring.feedback`: feedback-log NDJSON → **proxy accuracy** (overall +
+  per-class + by-source) → **`feedback.json`** data contract + `feedback_history.json` trend
+  (reuses `drift.read_ndjson_dir`; mirrors drift's `append_history`). **Empty window is normal**
+  (feedback is sparse) → `n=0`/`accuracy=null`, never raises (so a quiet week can't fail the
+  workflow). Wired into `drift-report.yml` (sync `feedback/dt=…` window → build → publish
+  feedback.json/history to `monitoring/`) and `evidence-pages.yml` (pull both into the hub). 6
+  new tests (153 total), ruff + check-yaml clean; verified end-to-end on synthetic feedback
+  (24 records → 0.58 overall, per-class + by-source split; empty dir → n=0). Branch
+  `phase4-proxy-accuracy`, PR pending. **Backend (#37) live + verified; frontend (portfolio #5)
+  verified end-to-end.** Task 3 fully built across both repos. NEXT: task 4 (drift-threshold
+  GitHub issue).
 - **2026-07-23 (personal laptop, later⁷)** — **Phase 4 task 3 BACKEND built** (branch
   `phase4-feedback-backend`, PR pending). The feedback signal spans both repos; this is the
   mlops half. `POST /feedback` on the serving app + `serving/feedback_log.py` (mirrors
@@ -687,18 +699,17 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phases 1–3 COMPLETE; Phase 4 tasks 1 & 2 DONE (drift report working end-to-end, real
-`drift.json` on the hub — live confidence 0.832 < reference 0.909); task 3 (feedback signal)
-UNDERWAY.** Next:
+**Phases 1–3 COMPLETE; Phase 4 tasks 1–3 DONE.** Drift report live (real `drift.json`, live
+confidence 0.832 < reference 0.909). Task 3 (feedback signal) built across both repos: `/feedback`
+live + verified (mlops #37); 👍/👎 UI verified (portfolio #5); proxy-accuracy → `feedback.json`
+(branch `phase4-proxy-accuracy`, PR pending). Next:
 
-1. **Task 3 — feedback signal (spans both repos), backend done:** mlops `POST /feedback` +
-   `feedback_log.py` + IAM built (branch `phase4-feedback-backend`, PR pending). **Admin after
-   merge: `terraform apply` (persistent) + redeploy the Lambda image** so `/feedback` is live.
-   Then the **frontend PR** (portfolio repo: `lib/predict.ts` `sendFeedback` + 👍/👎 in
-   `SketchDemo.tsx`, structural styling only — Monish polishes), then **drift-report
-   proxy-accuracy** (sync `feedback/`, correct-rate → `feedback.json` data contract → hub).
-2. **Tasks 4–7** (PLAN §5): drift-threshold GitHub issue (alerting-lite), documented retrain
-   path, portfolio polish, final cost review.
+1. **Merge the open PRs** (mlops `phase4-proxy-accuracy`; portfolio #5 if not yet). Then real
+   👍/👎 flow to `feedback/dt=…/`, and the weekly Drift report (or a dispatch) produces
+   `feedback.json`. No admin steps (IAM already applied for `feedback/*`).
+2. **Task 4 — alerting-lite** (PLAN §5): if the drift score crosses a threshold, the drift-report
+   workflow opens a GitHub issue (`drift-alert` label). Then tasks 5–7: documented retrain path,
+   portfolio polish, final cost review.
 3. **Phase 3 DoD tail (automatic):** two consecutive *scheduled* cron runs green — the monthly
    cron (1st, 06:00 UTC) supplies these; nothing to build.
 

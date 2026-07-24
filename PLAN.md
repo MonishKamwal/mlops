@@ -447,9 +447,13 @@ becomes a complete, navigable story.
    data contract** (per-column drift + self-computed distributions) + functional HTML +
    `drift_history.json` (drift-over-weeks trend), published to the evidence bucket and pulled
    into the hub by `evidence-pages.yml`. Prereq: repo var `PREDICTION_LOG_BUCKET`.
-3. **Feedback signal:** portfolio canvas gets "did I guess right? 👍/👎" → logged to S3 →
-   weekly proxy-accuracy chart joins the drift report (real ground-truth-ish labels from real
-   users — strong talking point).
+3. **Feedback signal — built 2026-07-23 (both repos).** Canvas 👍/👎 → `POST /feedback`
+   (`serving/app.py` + `serving/feedback_log.py`, self-contained event, fail-open) → JSONL to
+   `feedback/dt=…/`. The drift-report workflow syncs that window and
+   `quickdraw.monitoring.feedback` computes **proxy accuracy** (overall + per-class + by-source)
+   → **`feedback.json`** data contract + `feedback_history.json` trend → hub. Frontend: `sendFeedback`
+   in `lib/predict.ts` + 👍/👎 in `SketchDemo.tsx` (portfolio repo). An empty window is normal
+   (feedback is sparse) → `n=0`/`accuracy=null`, never an error.
 4. **Alerting-lite:** if drift score crosses threshold, the workflow opens a GitHub issue
    (`drift-alert` label) — the "page a human" step, right-sized.
 5. **Retrain path:** documented `workflow_dispatch` on `train-deploy.yml` optionally mixing
