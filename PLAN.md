@@ -469,11 +469,14 @@ becomes a complete, navigable story.
    the valuable half; 👍-only would merely reinforce). Backend (**PR 1, built**): `/feedback`
    optionally carries `strokes` + `true_label`; when present + labelable, a labeled capture writes
    to `captures/dt=…/` (separate from the lightweight `feedback/` stream) via
-   `serving/capture_log.py`; IAM extended to `captures/*`. Pipeline (**PR 3, todo**):
-   `training.augment` rasterizes captures via the shared `strokes_to_model_input` (no skew) and
-   folds them into the training split above a quality bar (👍 conf ≥ 0.7; all 👎-with-label; per-class
-   cap); a `train-deploy` `workflow_dispatch` toggle opts in. Frontend (**PR 2, todo**): send
-   strokes, 👎 class-picker, consent notice. Demonstrate once.
+   `serving/capture_log.py`; IAM extended to `captures/*`. Pipeline (**PR 3, built**):
+   `training.augment` rasterizes captures via the shared `rasterize_strokes` (no skew) and folds
+   them into the **train** split only (val/test pristine → honest eval) above a quality bar (👍
+   conf ≥ 0.7; all 👎-with-label; per-class cap 500); a `train-deploy` `workflow_dispatch`
+   `include_captures` toggle runs an explicit train→evaluate→export→reference on the augmented npz
+   (opt-in, non-reproducible by design — captures are live data — so it skips `dvc repro`/`dvc
+   push`; gate→build→deploy unchanged). Frontend (**PR 2, built**): send strokes, 👎 class-picker,
+   consent notice. **Demonstrate once** by dispatching train-deploy with `include_captures=true`.
 6. **Portfolio polish (details in `PORTFOLIO_PLAN.md`):** architecture diagram (clickable →
    journey entries), per-component write-ups, journey/devlog section covering decisions & wrong
    turns, evidence hub integration, README overhaul with badges and architecture diagram.
