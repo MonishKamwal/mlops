@@ -64,14 +64,17 @@ jobs:
       - name: Render the evidence hub
         run: uv run python -m quickdraw.evidence.export --out _site
 
-      # The drift report (Phase 4) is produced by the Drift report workflow and lives in the
-      # evidence bucket; pull its data contract + HTML + trend into the site so the hub serves
-      # them at /mlops/drift.json etc. Best-effort: before the first drift run there's nothing.
-      - name: Pull the drift report into the site (best-effort)
+      # The drift + proxy-accuracy reports (Phase 4) are produced by the Drift report workflow
+      # and live in the evidence bucket; pull their data contracts + HTML + trends into the site
+      # so the hub serves them at /mlops/drift.json, /mlops/feedback.json, etc. Best-effort:
+      # before the first drift run there's nothing.
+      - name: Pull the monitoring reports into the site (best-effort)
         run: |
           aws s3 cp "s3://$MLFLOW_STATE_BUCKET/monitoring/" _site/ --recursive \
-            --exclude "*" --include "drift.json" --include "drift.html" --include "drift_history.json" \
-            --no-progress || echo "no drift report published yet — hub omits it"
+            --exclude "*" \
+            --include "drift.json" --include "drift.html" --include "drift_history.json" \
+            --include "feedback.json" --include "feedback_history.json" \
+            --no-progress || echo "no monitoring reports published yet — hub omits them"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

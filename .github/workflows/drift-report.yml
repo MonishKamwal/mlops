@@ -67,10 +67,25 @@ jobs:
           done
           echo "synced $(find live-logs -name '*.jsonl' | wc -l) log objects"
 
-      - name: Pull existing drift history (best-effort)
+      # Feedback (👍/👎) is a separate, sparser stream under feedback/dt=…/; a window with
+      # no clicks is normal, so this is best-effort and the module tolerates an empty dir.
+      - name: Sync the last ${{ env.WINDOW_DAYS }} days of feedback
         run: |
-          aws s3 cp "s3://$DATA_BUCKET/monitoring/drift_history.json" drift_history.json \
-            --no-progress 2>/dev/null || echo "no history yet — starting fresh"
+          set -euo pipefail
+          mkdir -p feedback-logs
+          for i in $(seq 0 $((WINDOW_DAYS - 1))); do
+            day=$(date -u -d "-$i day" +%Y-%m-%d)
+            aws s3 cp "s3://$LOGS_BUCKET/feedback/dt=$day/" "feedback-logs/dt=$day/" \
+              --recursive --no-progress 2>/dev/null || true
+          done
+          echo "synced $(find feedback-logs -name '*.jsonl' | wc -l) feedback objects"
+
+      - name: Pull existing drift + feedback history (best-effort)
+        run: |
+          for f in drift_history.json feedback_history.json; do
+            aws s3 cp "s3://$DATA_BUCKET/monitoring/$f" "$f" \
+              --no-progress 2>/dev/null || echo "no $f yet — starting fresh"
+          done
 
       - name: Build the drift report
         run: |
@@ -80,12 +95,19 @@ jobs:
             --out-html drift.html \
             --history drift_history.json
 
+      - name: Build the proxy-accuracy report
+        run: |
+          uv run python -m quickdraw.monitoring.feedback \
+            --current-dir feedback-logs \
+            --out-json feedback.json \
+            --history feedback_history.json
+
       # Publish the data contract + HTML + trend to the evidence bucket; evidence-pages.yml
       # pulls them into the hub on its next build (triggered by this workflow completing).
       - name: Publish to the evidence bucket
         run: |
           set -euo pipefail
-          for f in drift.json drift.html drift_history.json; do
+          for f in drift.json drift.html drift_history.json feedback.json feedback_history.json; do
             aws s3 cp "$f" "s3://$DATA_BUCKET/monitoring/$f" --no-progress
           done
 
@@ -98,4 +120,6 @@ jobs:
             drift.json
             drift.html
             drift_history.json
+            feedback.json
+            feedback_history.json
           if-no-files-found: warn
