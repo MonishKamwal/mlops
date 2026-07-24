@@ -70,6 +70,20 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-24 (personal laptop)** — **Phase 4 task 5 (retrain flywheel) — PR 1 (backend
+  capture) built** (branch `phase4-capture-backend`, PR pending). Monish chose a **real
+  retraining pipeline** over a documented mechanism: capturing drawing + verdict is fine with a
+  consent notice (no identity/tracking — see [[retrain-capture-consent]]). `/feedback` now
+  optionally accepts `strokes` + `true_label`; when strokes present + labelable, writes a labeled
+  capture to `captures/dt=…/` via new `serving/capture_log.py` (separate heavy stream from the
+  lightweight `feedback/` verdict stream). **Label:** 👍 → the guess; 👎 → `true_label` (the
+  correction); 👎 without a correction logs the verdict but no capture (unlabeled error isn't
+  trainable); invalid correction → 404. Stores raw strokes (retrain rasterizes via shared
+  `strokes_to_model_input` → no skew). IAM extended to `captures/*`. Fail-open, env-switched on
+  the shared `PREDICTION_LOG_BUCKET`. 9 new tests (169 total), ruff + tf validate clean, torch-free
+  guard holds. **Admin after merge: `terraform apply` (persistent)** — Lambda auto-redeploys via
+  train-deploy (`serving/**` path). NEXT: PR 2 frontend (send strokes + 👎 class-picker + consent
+  notice), PR 3 `training.augment` + train-deploy `include_captures` toggle.
 - **2026-07-23 (personal laptop, later⁹)** — **Phase 4 task 4 (alerting-lite) built** (branch
   `phase4-drift-alert`, PR pending). `quickdraw.monitoring.alert` (pure `evaluate`) decides from
   drift.json + feedback.json; drift-report opens/updates a **`drift-alert`** GitHub issue
@@ -710,16 +724,20 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phases 1–3 COMPLETE; Phase 4 tasks 1–4 DONE.** Drift report live; feedback signal (task 3)
-built across both repos (`/feedback` live, 👍/👎 UI, proxy-accuracy → `feedback.json`); alerting-lite
-(task 4) built (branch `phase4-drift-alert`, PR pending). Next:
+**Phases 1–3 COMPLETE; Phase 4 tasks 1–4 DONE; task 5 (retrain flywheel) UNDERWAY.** Task 4
+(alerting) merged + test-fired (#40 opened then closed). Task 5 = real retraining pipeline across
+both repos (Monish's call; see [[retrain-capture-consent]]) in 3 PRs; **PR 1 (backend capture)
+built** (branch `phase4-capture-backend`). Next:
 
-1. **Merge `phase4-drift-alert`.** Optional: **test-fire the alert** once for the DoD — dispatch
-   Drift report with input `min_confidence=1.0` → forces a `drift-alert` GitHub issue.
-2. **Task 5 — retrain path** (PLAN §5): documented `workflow_dispatch` on train-deploy optionally
-   mixing high-confidence/👍 real drawings into training — completes the data flywheel narrative
-   (demonstrate once). Then **task 6** (portfolio polish — largely Monish's visual domain: arch
-   diagram, journey/devlog, evidence integration) and **task 7** (final cost review → Cost
+1. **Merge PR 1 + `terraform apply`** (persistent — adds `captures/*` PutObject; Lambda
+   auto-redeploys via train-deploy's `serving/**` path). Then `/feedback` captures labeled
+   drawings.
+2. **PR 2 — frontend** (portfolio): send strokes with feedback, 👎 class-picker (→ `true_label`),
+   consent notice on the canvas. **PR 3 — pipeline** (mlops): `quickdraw.training.augment`
+   (rasterize captures via shared preprocess → fold into train split; 👍 conf≥0.7, all 👎-labeled,
+   per-class cap) + `train-deploy` `workflow_dispatch` `include_captures` toggle; demonstrate once.
+3. Then **task 6** (portfolio polish — largely Monish's visual domain: arch diagram, journey/devlog,
+   evidence integration) and **task 7** (final cost review → Cost
    Explorer screenshot as evidence).
 3. **Phase 3 DoD tail (automatic):** two consecutive *scheduled* cron runs green — the monthly
    cron (1st, 06:00 UTC) supplies these; nothing to build.

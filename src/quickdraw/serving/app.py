@@ -8,6 +8,8 @@
   to S3 (:mod:`quickdraw.serving.prediction_log` — digest, top-3, latency; no PII).
 - ``POST /feedback`` — a visitor's 👍/👎 on a prediction (Phase 4, task 3); writes one
   JSONL record to S3 (:mod:`quickdraw.serving.feedback_log`) for the proxy-accuracy signal.
+  When the request also carries the drawing (+ a correction for a 👎), the labeled drawing is
+  captured for retraining (:mod:`quickdraw.serving.capture_log`, Phase 4 task 5).
 - ``GET /healthz`` — readiness: the Lambda Web Adapter polls it before forwarding
   traffic; EKS probes reuse it in Phase 3.
 - ``GET /model-info`` — which model is loaded (classes, val_accuracy, sha256).
@@ -37,6 +39,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field
 
 from quickdraw.data.preprocess import png_to_model_input, strokes_to_model_input
+from quickdraw.serving.capture_log import CaptureLog, capture_log_from_env
 from quickdraw.serving.feedback_log import FeedbackLog, feedback_log_from_env
 from quickdraw.serving.prediction_log import PredictionLog, prediction_log_from_env
 from quickdraw.serving.predictor import Predictor
@@ -81,6 +84,10 @@ class FeedbackRequest(BaseModel):
     prediction logs. ``correct`` is the whole signal; the rest lets proxy-accuracy be
     sliced by class/model. ``model_sha256`` is optional — the client gets it from
     ``/model-info`` and may not always have it.
+
+    ``strokes`` (+ ``true_label`` for a 👎) are optional: when present, the drawing is
+    captured as a labeled training example (Phase 4, task 5). The verdict is always logged;
+    the capture only happens when there's a drawing and a resolvable label.
     """
 
     predicted_label: str
@@ -88,12 +95,15 @@ class FeedbackRequest(BaseModel):
     correct: bool
     source: Literal["strokes", "png"] = "strokes"
     model_sha256: str = ""
+    strokes: list[list[list[float]]] | None = None
+    true_label: str | None = None  # what the user says they drew (only meaningful for a 👎)
 
 
 def create_app(
     model_path: Path | None = None,
     prediction_log: PredictionLog | None = None,
     feedback_log: FeedbackLog | None = None,
+    capture_log: CaptureLog | None = None,
 ) -> FastAPI:
     """Build the app around one model file (env ``MODEL_PATH`` unless overridden).
 
@@ -101,8 +111,8 @@ def create_app(
     safe, and a missing/corrupt model fails the server at startup — loudly, before
     the readiness check ever passes — instead of on the first request.
 
-    ``prediction_log``/``feedback_log`` are injectable for tests; by default they come
-    from the environment (``PREDICTION_LOG_BUCKET`` set -> log to S3, unset -> disabled).
+    ``prediction_log``/``feedback_log``/``capture_log`` are injectable for tests; by default
+    they come from the environment (``PREDICTION_LOG_BUCKET`` set -> log to S3, unset -> off).
     """
     path = Path(model_path or os.environ.get("MODEL_PATH", DEFAULT_MODEL_PATH))
 
@@ -111,6 +121,7 @@ def create_app(
         app.state.predictor = Predictor(path)
         app.state.prediction_log = prediction_log or prediction_log_from_env()
         app.state.feedback_log = feedback_log or feedback_log_from_env()
+        app.state.capture_log = capture_log or capture_log_from_env()
         yield
 
     app = FastAPI(title="QuickDraw sketch classifier", lifespan=lifespan)
@@ -182,6 +193,8 @@ def create_app(
                 status_code=404, detail=f"unknown label {request.predicted_label!r}"
             )
 
+        model_sha256 = request.model_sha256 or predictor.model_sha256
+
         log: FeedbackLog | None = app.state.feedback_log
         if log is not None:
             log.log(
@@ -189,9 +202,29 @@ def create_app(
                 confidence=request.confidence,
                 correct=request.correct,
                 source=request.source,
-                model_sha256=request.model_sha256 or predictor.model_sha256,
+                model_sha256=model_sha256,
                 service_version=version("quickdraw"),
             )
+
+        # Capture the drawing as a labeled training example when we have both a drawing and a
+        # resolvable label: a 👍 confirms the guess; a 👎 carries the user's correction. A 👎
+        # without a correction (picker skipped) still logs the verdict but stores no capture —
+        # an unlabeled error isn't trainable.
+        capture: CaptureLog | None = app.state.capture_log
+        if capture is not None and request.strokes:
+            label = request.predicted_label if request.correct else request.true_label
+            if label is not None:
+                if label not in predictor.classes:
+                    raise HTTPException(status_code=404, detail=f"unknown label {label!r}")
+                capture.log(
+                    strokes=request.strokes,
+                    label=label,
+                    predicted_label=request.predicted_label,
+                    correct=request.correct,
+                    confidence=request.confidence,
+                    model_sha256=model_sha256,
+                    service_version=version("quickdraw"),
+                )
 
     return app
 
