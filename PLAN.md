@@ -461,9 +461,19 @@ becomes a complete, navigable story.
    nothing) — only on the model doing *badly* on real drawings: **mean confidence below a floor**
    (default 0.55) or **proxy accuracy below a floor** (default 0.5, gated on ≥10 verdicts).
    Thresholds are tunable; a `workflow_dispatch` `min_confidence` input (set 1.0) test-fires it.
-5. **Retrain path:** documented `workflow_dispatch` on `train-deploy.yml` optionally mixing
-   logged real drawings (above a confidence/feedback bar) into training data — even if only
-   demonstrated once, it completes the data flywheel narrative.
+5. **Retrain path — building 2026-07-24 (real pipeline, both repos).** *Amended from
+   "documented mechanism" to an actual flywheel* (Monish's call): capturing the drawing + 👍/👎
+   verdict carries no privacy issue with an upfront consent notice (no identity/tracking), so we
+   capture real drawings and retrain on them. **Label resolution:** 👍 → label = the guess; 👎 →
+   a canvas class-picker supplies the *true* label (corrective data — the model's actual errors,
+   the valuable half; 👍-only would merely reinforce). Backend (**PR 1, built**): `/feedback`
+   optionally carries `strokes` + `true_label`; when present + labelable, a labeled capture writes
+   to `captures/dt=…/` (separate from the lightweight `feedback/` stream) via
+   `serving/capture_log.py`; IAM extended to `captures/*`. Pipeline (**PR 3, todo**):
+   `training.augment` rasterizes captures via the shared `strokes_to_model_input` (no skew) and
+   folds them into the training split above a quality bar (👍 conf ≥ 0.7; all 👎-with-label; per-class
+   cap); a `train-deploy` `workflow_dispatch` toggle opts in. Frontend (**PR 2, todo**): send
+   strokes, 👎 class-picker, consent notice. Demonstrate once.
 6. **Portfolio polish (details in `PORTFOLIO_PLAN.md`):** architecture diagram (clickable →
    journey entries), per-component write-ups, journey/devlog section covering decisions & wrong
    turns, evidence hub integration, README overhaul with badges and architecture diagram.
