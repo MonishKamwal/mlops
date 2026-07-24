@@ -30,6 +30,11 @@ on:
       - Dockerfile
       - uv.lock
   workflow_dispatch:
+    inputs:
+      include_captures:
+        description: "Retrain on captured real drawings (Phase 4 task 5): fold captures/ into the training set."
+        type: boolean
+        default: false
 
 permissions:
   id-token: write # mint the OIDC token to assume the AWS role
@@ -52,6 +57,8 @@ jobs:
       ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
       API_FUNCTION_URL: ${{ vars.API_FUNCTION_URL }}
       LAMBDA_FUNCTION_NAME: quickdraw-api
+      LOGS_BUCKET: ${{ vars.PREDICTION_LOG_BUCKET }} # captured drawings live here (task 5)
+      CAPTURE_DAYS: "60"
     steps:
       - uses: actions/checkout@v4
 
@@ -87,14 +94,37 @@ jobs:
       - name: Pull DVC artifacts (best-effort)
         run: uv run dvc pull || echo "some outs are not in the remote (raw is push:false) — repro will rebuild them"
 
+      # Normal path: the reproducible pipeline. `dvc repro` runs download → … → train →
+      # evaluate → export → reference, then push derived outs so a fresh clone can pull them.
       - name: Reproduce the pipeline (download → … → train → evaluate → export)
-        run: uv run dvc repro
+        if: ${{ !inputs.include_captures }}
+        run: |
+          uv run dvc repro
+          uv run dvc push
 
-      # Populate the DVC remote with the regenerated derived outs (processed npz, model, …) so a
-      # fresh clone / a later run can `dvc pull` them instead of rebuilding. `raw` is push:false
-      # (Google GCS is canonical), so only derived artifacts upload.
-      - name: Push DVC artifacts to S3
-        run: uv run dvc push
+      # Retrain path (task 5, opt-in): build the base data through `dvc repro validate`, fold in
+      # captured real drawings, then run train → evaluate → export → reference explicitly on the
+      # AUGMENTED npz. Not `dvc repro` + `dvc push`: captures are live data, so the run isn't
+      # byte-reproducible and its outs don't belong in the DVC remote (val/test stay untouched,
+      # so evaluation is still honest). Everything downstream (gate, build, deploy) is identical.
+      - name: Reproduce the pipeline with captured drawings (retrain)
+        if: ${{ inputs.include_captures }}
+        run: |
+          set -euo pipefail
+          uv run dvc repro validate
+          mkdir -p captures
+          for i in $(seq 0 $((CAPTURE_DAYS - 1))); do
+            day=$(date -u -d "-$i day" +%Y-%m-%d)
+            aws s3 cp "s3://$LOGS_BUCKET/captures/dt=$day/" "captures/dt=$day/" \
+              --recursive --no-progress 2>/dev/null || true
+          done
+          echo "synced $(find captures -name '*.jsonl' | wc -l) capture objects"
+          AUG=data/processed/quickdraw_augmented.npz
+          uv run python -m quickdraw.training.augment --captures captures --out "$AUG"
+          uv run python -m quickdraw.training.train --data "$AUG"
+          uv run python -m quickdraw.training.evaluate --data "$AUG"
+          uv run python -m quickdraw.training.export_onnx
+          uv run python -m quickdraw.monitoring.reference --data "$AUG"
 
       # Publish the drift reference to a STABLE S3 path for the drift report to read. It can't
       # `dvc pull` this by lockfile md5: CI training isn't byte-identical to whatever produced the

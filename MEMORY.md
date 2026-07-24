@@ -70,6 +70,18 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-24 (personal laptop, later²)** — **Phase 4 task 5 — PR 3 (retrain pipeline) built**
+  (branch `phase4-retrain-pipeline`, PR pending). `quickdraw.training.augment`: capture NDJSON →
+  `select_captures` (quality bar: 👍 kept only if conf ≥ 0.7, all 👎-with-label kept, per-class cap
+  500) → `rasterize_captures` (shared `rasterize_strokes` → (28,28) uint8, matches x_train) →
+  `augment_npz` extends **train split only** (val/test pristine → honest eval). train-deploy gets a
+  `workflow_dispatch` `include_captures` toggle: normal path unchanged (`dvc repro`+push); retrain
+  path runs `dvc repro validate` → sync `captures/` (60d) → augment → explicit
+  train/evaluate/export/reference on the augmented npz (**skips dvc repro/push** — captures are live
+  data, non-reproducible by design), then gate→build→deploy as usual. 8 new tests (177 total), ruff
+  + check-yaml clean; augment verified on the real 120k npz (10 captures folded, 2 low-conf 👍
+  dropped, test split untouched). **Task 5 built end-to-end across both repos.** Demonstrate once:
+  dispatch train-deploy with `include_captures=true` (after some real 👍/👎 captures accrue).
 - **2026-07-24 (personal laptop)** — **Phase 4 task 5 (retrain flywheel) — PR 1 (backend
   capture) built** (branch `phase4-capture-backend`, PR pending). Monish chose a **real
   retraining pipeline** over a documented mechanism: capturing drawing + verdict is fine with a
@@ -724,18 +736,16 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phases 1–3 COMPLETE; Phase 4 tasks 1–4 DONE; task 5 (retrain flywheel) UNDERWAY.** Task 4
-(alerting) merged + test-fired (#40 opened then closed). Task 5 = real retraining pipeline across
-both repos (Monish's call; see [[retrain-capture-consent]]) in 3 PRs; **PR 1 (backend capture)
-built** (branch `phase4-capture-backend`). Next:
+**Phases 1–3 COMPLETE; Phase 4 tasks 1–4 DONE; task 5 (retrain flywheel) BUILT across both repos
+— PRs 2 & 3 pending merge.** PR 1 (backend capture) merged + `/feedback` capture live + verified;
+`terraform apply` done. PR 2 (frontend, portfolio #6) + PR 3 (pipeline, branch
+`phase4-retrain-pipeline`) pending. Next:
 
-1. **Merge PR 1 + `terraform apply`** (persistent — adds `captures/*` PutObject; Lambda
-   auto-redeploys via train-deploy's `serving/**` path). Then `/feedback` captures labeled
-   drawings.
-2. **PR 2 — frontend** (portfolio): send strokes with feedback, 👎 class-picker (→ `true_label`),
-   consent notice on the canvas. **PR 3 — pipeline** (mlops): `quickdraw.training.augment`
-   (rasterize captures via shared preprocess → fold into train split; 👍 conf≥0.7, all 👎-labeled,
-   per-class cap) + `train-deploy` `workflow_dispatch` `include_captures` toggle; demonstrate once.
+1. **Merge PR 2 (portfolio #6) + PR 3 (mlops `phase4-retrain-pipeline`).** No admin steps (IAM
+   already applied). After merge, draw a few 👍/👎 on the live site to seed real captures.
+2. **Demonstrate the flywheel once** (task 5 DoD): dispatch **Train & Deploy** with
+   `include_captures=true` → folds `captures/` into training → gate → deploy. Watch the run;
+   confirm the augment step reports captures folded.
 3. Then **task 6** (portfolio polish — largely Monish's visual domain: arch diagram, journey/devlog,
    evidence integration) and **task 7** (final cost review → Cost
    Explorer screenshot as evidence).
