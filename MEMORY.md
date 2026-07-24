@@ -70,6 +70,15 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-24 (personal laptop, later³)** — **Phase 4 task 5 COMPLETE — retrain flywheel
+  demonstrated end-to-end.** PRs #6 (frontend) + #42 (pipeline) merged; dispatched Train & Deploy
+  with `include_captures=true` (run 30061303377, success). Log: **synced 4 capture objects →
+  "augmented training set with 4 captured drawings" → registered v14 challenger (test 0.9163) →
+  gate PASS** (v14 0.9163 vs champion v2 0.9170, delta −0.0007 within ε; ships, doesn't re-crown)
+  → built + deployed. The full canvas→CI→…→drift→feedback→**retrain** loop is proven. (The 4
+  captures were earlier live *test* posts with dummy strokes — 4 vs 120k = negligible, gate held,
+  as expected; a real fold needs traffic volume.) **Phase 4 tasks 1–5 all DONE.** Remaining: task 6
+  (portfolio polish — Monish's visual domain) + task 7 (cost review).
 - **2026-07-24 (personal laptop, later²)** — **Phase 4 task 5 — PR 3 (retrain pipeline) built**
   (branch `phase4-retrain-pipeline`, PR pending). `quickdraw.training.augment`: capture NDJSON →
   `select_captures` (quality bar: 👍 kept only if conf ≥ 0.7, all 👎-with-label kept, per-class cap
@@ -736,21 +745,21 @@ added.
 
 ## Immediate next step (rolling — keep this precise)
 
-**Phases 1–3 COMPLETE; Phase 4 tasks 1–4 DONE; task 5 (retrain flywheel) BUILT across both repos
-— PRs 2 & 3 pending merge.** PR 1 (backend capture) merged + `/feedback` capture live + verified;
-`terraform apply` done. PR 2 (frontend, portfolio #6) + PR 3 (pipeline, branch
-`phase4-retrain-pipeline`) pending. Next:
+**Phases 1–3 COMPLETE; Phase 4 tasks 1–5 DONE** (retrain flywheel demonstrated end-to-end, run
+30061303377 — captures folded → v14 → gate PASS → deployed). **Only tasks 6 & 7 remain.** Next:
 
-1. **Merge PR 2 (portfolio #6) + PR 3 (mlops `phase4-retrain-pipeline`).** No admin steps (IAM
-   already applied). After merge, draw a few 👍/👎 on the live site to seed real captures.
-2. **Demonstrate the flywheel once** (task 5 DoD): dispatch **Train & Deploy** with
-   `include_captures=true` → folds `captures/` into training → gate → deploy. Watch the run;
-   confirm the augment step reports captures folded.
-3. Then **task 6** (portfolio polish — largely Monish's visual domain: arch diagram, journey/devlog,
-   evidence integration) and **task 7** (final cost review → Cost
-   Explorer screenshot as evidence).
+1. **Task 6 — portfolio polish** (largely Monish's visual domain, in the portfolio repo): arch
+   diagram, journey/devlog (LEARNING.md is the raw material), per-component write-ups, and wiring
+   the hub's data contracts into the site (`drift.json`, `feedback.json`, `api-metrics.json`,
+   `evidence.json`, `drift_history.json`, `feedback_history.json`). Claude can help with
+   structure/content + contract wiring; design is Monish's.
+2. **Task 7 — final cost review**: Cost Explorer screenshot for the project month → publish as
+   evidence ("the whole platform runs on <$5/mo"). A one-time console task for Monish.
 3. **Phase 3 DoD tail (automatic):** two consecutive *scheduled* cron runs green — the monthly
    cron (1st, 06:00 UTC) supplies these; nothing to build.
+
+Optional real-fold demo: draw a batch of 👍/👎 on the live site, re-dispatch Train & Deploy with
+`include_captures=true` for a meatier augment than the 4 test-post captures.
 
 Housekeeping (anytime): link the eks-demo run page + Grafana PNG + drift.json from the hub; the
 5xx dashboard panel shows "No data" at zero errors (`or vector(0)` → 0); Node-20 workflow actions
