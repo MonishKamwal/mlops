@@ -13,6 +13,8 @@ on:
     branches: [main]
     paths:
       - src/quickdraw/evidence/**
+      - src/quickdraw/portfolio/**
+      - portfolio/**
       - reports/eval/**
   workflow_dispatch:
 
@@ -63,6 +65,12 @@ jobs:
 
       - name: Render the evidence hub
         run: uv run python -m quickdraw.evidence.export --out _site
+
+      # Portfolio content contracts: hand-curated markdown (portfolio/*_edit.md) → JSON the
+      # site renders. Generated from the tracked edit files alone (no S3/MLflow), so the hub
+      # serves them at /mlops/portfolio/architecture.json and /mlops/portfolio/journey.json.
+      - name: Render the portfolio content contracts
+        run: uv run python -m quickdraw.portfolio.export --out-dir _site/portfolio
 
       # The drift + proxy-accuracy reports (Phase 4) are produced by the Drift report workflow
       # and live in the evidence bucket; pull their data contracts + HTML + trends into the site
