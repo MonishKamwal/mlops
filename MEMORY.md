@@ -79,9 +79,10 @@ is the long-term what-and-why; this file is the current state and the exact next
   gets `MLFLOW_STATE_BUCKET` env + a best-effort publish step before teardown (a capture miss won't
   fail the run); `evidence-pages.yml` pulls it into `_site/` (served at **`/mlops/api-metrics.json`**)
   and gains an `"EKS demo"` `workflow_run` trigger so a fresh run republishes the hub. `terraform
-  validate`/`fmt` + both YAMLs clean; no app/test code touched. **Admin after merge: `terraform
-  apply` (persistent)** for the IAM grant; the file first lands on the hub after the **next EKS demo
-  run** (monthly cron or dispatch) — not backfilled.
+  validate`/`fmt` + both YAMLs clean; no app/test code touched. **MERGED (PR #47) + `terraform
+  apply` DONE** — the `gha-eks` `PutObject` grant on `monitoring/api-metrics.json` is live. Only
+  remaining: the file lands on the hub after the **next EKS demo run** (monthly cron or dispatch) —
+  not backfilled, so `/mlops/api-metrics.json` 404s until then.
 - **2026-07-26 (personal laptop, later)** — **Phase 4 task 6 — portfolio content pipeline built**
   (branch `phase4-portfolio-content`, PR #46). Monish's ask: boil the deep docs down into
   intermediate edit files *he* curates, converted to a transferable JSON contract the site styles —
