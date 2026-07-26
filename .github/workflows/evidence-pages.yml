@@ -7,7 +7,7 @@ name: Evidence hub
 
 on:
   workflow_run:
-    workflows: ["Train & Deploy", "Drift report"]
+    workflows: ["Train & Deploy", "Drift report", "EKS demo"]
     types: [completed]
   push:
     branches: [main]
@@ -82,6 +82,7 @@ jobs:
             --exclude "*" \
             --include "drift.json" --include "drift.html" --include "drift_history.json" \
             --include "feedback.json" --include "feedback_history.json" \
+            --include "api-metrics.json" \
             --no-progress || echo "no monitoring reports published yet — hub omits them"
 
       - name: Upload Pages artifact
