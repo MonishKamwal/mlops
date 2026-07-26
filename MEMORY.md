@@ -70,6 +70,21 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-26 (personal laptop, later)** — **Phase 4 task 6 — portfolio content pipeline built**
+  (branch `phase4-portfolio-content`, PR #46). Monish's ask: boil the deep docs down into
+  intermediate edit files *he* curates, converted to a transferable JSON contract the site styles —
+  the same data-vs-presentation split as `evidence.json`/`drift.json`, now for narrative content.
+  Flow: `ARCHITECTURE.md`/`LEARNING.md` → hand-curated `portfolio/*_edit.md` → `quickdraw.portfolio.export`
+  → `architecture.json`/`journey.json`. The converter is **deliberately dumb**: splits YAML
+  front-matter + `##` sections and copies each section's **raw markdown through unchanged** (never
+  rewrites prose — mermaid/emoji survive); two kinds — `sections` (architecture) and `journey`
+  (dated `## YYYY-MM-DD — headline`, fails loudly on a bad date). Edit files are the tracked source
+  of truth; generated `reports/portfolio/*.json` stays gitignored (regenerable). Wired into
+  `evidence-pages.yml` (new render step → `_site/portfolio/`, so the hub serves
+  `/mlops/portfolio/{architecture,journey}.json`; push to `portfolio/**` republishes). Seeded the
+  edit files from the current docs as a starting point (Monish rewrites the prose in his voice).
+  13 new tests (192 total), ruff + format + YAML clean. **This is the mlops half of task 6's
+  content wiring; the site consuming these contracts stays Monish's visual domain.**
 - **2026-07-26 (personal laptop)** — **PR #44 merged** (`phase4-architecture-docs` → main, commit
   `8fae4b4`): the Phase 4 task 6 mlops-repo half (`ARCHITECTURE.md` + README overhaul) is now on
   main, CI green, working tree clean. Task 6's remaining work is the **portfolio repo half**
@@ -770,12 +785,14 @@ added.
 
 1. **Task 6 — portfolio polish.** The **mlops-repo half is DONE** (PR #44 merged 2026-07-26,
    commit `8fae4b4`): `ARCHITECTURE.md` (the deep reference, 9 diagrams) + a README overhaul
-   (badges, hero diagram, accurate status). The **portfolio repo remains** — largely Monish's
-   visual domain: site copy off ARCHITECTURE.md §1/§5/§11,
-   journey/devlog (LEARNING.md is the raw material), per-component write-ups, and wiring the hub's
-   data contracts into the site (`drift.json`, `feedback.json`, `api-metrics.json`,
-   `evidence.json`, `drift_history.json`, `feedback_history.json`). Claude can help with
-   structure/content + contract wiring; design is Monish's.
+   (badges, hero diagram, accurate status). The **narrative content pipeline is built** (PR #46,
+   pending): `portfolio/*_edit.md` (hand-curated) → `quickdraw.portfolio.export` →
+   `architecture.json`/`journey.json`, published to `/mlops/portfolio/` via `evidence-pages.yml`.
+   The **portfolio repo remains** — largely Monish's visual domain: **curate the `*_edit.md` prose**,
+   then site copy off ARCHITECTURE.md §1/§5/§11, journey/devlog timeline, per-component write-ups,
+   and wiring the hub's data contracts into the site (`architecture.json`, `journey.json`,
+   `drift.json`, `feedback.json`, `api-metrics.json`, `evidence.json`, `drift_history.json`,
+   `feedback_history.json`). Claude can help with structure/content + contract wiring; design is Monish's.
 2. **Task 7 — final cost review**: Cost Explorer screenshot for the project month → publish as
    evidence ("the whole platform runs on <$5/mo"). A one-time console task for Monish.
 3. **Phase 3 DoD tail (automatic):** two consecutive *scheduled* cron runs green — the monthly
