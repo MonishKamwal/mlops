@@ -25,6 +25,7 @@ concurrency:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
+  MLFLOW_STATE_BUCKET: ${{ vars.MLFLOW_STATE_BUCKET }} # data bucket — publish api-metrics.json here
   TF_DIR: infra/ephemeral
   CLUSTER_NAME: quickdraw-ephemeral
   LAMBDA_FUNCTION_NAME: quickdraw-api
@@ -172,6 +173,19 @@ jobs:
           kubectl -n "$NAMESPACE" rollout history "deploy/$RELEASE" > eks-evidence/rollout.txt 2>&1 || true
           kubectl top nodes > eks-evidence/top-nodes.txt 2>&1 || true
           kubectl top pods -n "$NAMESPACE" > eks-evidence/top-pods.txt 2>&1 || true
+
+      # Publish the metric-series contract to the evidence bucket's monitoring/ prefix (same place
+      # drift.json/feedback.json live) so evidence-pages serves it at /mlops/api-metrics.json.
+      # Best-effort: a capture hiccup (no file) must not fail the run or block teardown.
+      - name: Publish api-metrics.json to the evidence bucket
+        if: always()
+        run: |
+          if [ -f eks-evidence/api-metrics.json ]; then
+            aws s3 cp eks-evidence/api-metrics.json \
+              "s3://$MLFLOW_STATE_BUCKET/monitoring/api-metrics.json" --no-progress
+          else
+            echo "no api-metrics.json captured — nothing to publish"
+          fi
 
       - name: Upload evidence
         if: always()

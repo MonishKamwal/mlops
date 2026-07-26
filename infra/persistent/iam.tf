@@ -237,6 +237,15 @@ data "aws_iam_policy_document" "gha_eks_permissions" {
     actions   = ["lambda:GetFunction"]
     resources = ["arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:quickdraw-*"]
   }
+
+  # Publish the cluster's captured API metric series to the evidence bucket so the hub (and the
+  # portfolio site) can serve api-metrics.json alongside drift.json / feedback.json. Scoped to
+  # that single key — gha-eks gets no other reach into the data bucket.
+  statement {
+    sid       = "PublishApiMetrics"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.data.arn}/monitoring/api-metrics.json"]
+  }
 }
 
 resource "aws_iam_role_policy" "gha_eks" {

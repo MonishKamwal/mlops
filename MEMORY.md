@@ -70,6 +70,18 @@ is the long-term what-and-why; this file is the current state and the exact next
 
 ## Progress log
 
+- **2026-07-26 (personal laptop, later²)** — **Publish `api-metrics.json` to the hub** (branch
+  `phase4-publish-api-metrics`, PR #47). The eks-demo run already captures `api-metrics.json` (raw
+  Prometheus series behind the Grafana panels — RPS, latency percentiles, error rate, node CPU/mem)
+  but only as a GitHub Actions **artifact**, so the site couldn't fetch it by URL. Now routed to the
+  hub like the other monitoring contracts: `iam.tf` grants `gha-eks` `s3:PutObject` on **exactly one
+  key** (`<data-bucket>/monitoring/api-metrics.json`, no other data-bucket reach); `eks-demo.yml`
+  gets `MLFLOW_STATE_BUCKET` env + a best-effort publish step before teardown (a capture miss won't
+  fail the run); `evidence-pages.yml` pulls it into `_site/` (served at **`/mlops/api-metrics.json`**)
+  and gains an `"EKS demo"` `workflow_run` trigger so a fresh run republishes the hub. `terraform
+  validate`/`fmt` + both YAMLs clean; no app/test code touched. **Admin after merge: `terraform
+  apply` (persistent)** for the IAM grant; the file first lands on the hub after the **next EKS demo
+  run** (monthly cron or dispatch) — not backfilled.
 - **2026-07-26 (personal laptop, later)** — **Phase 4 task 6 — portfolio content pipeline built**
   (branch `phase4-portfolio-content`, PR #46). Monish's ask: boil the deep docs down into
   intermediate edit files *he* curates, converted to a transferable JSON contract the site styles —
